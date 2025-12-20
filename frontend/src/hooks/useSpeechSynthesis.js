@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 
-export function useSpeechSynthesis() {
+export function useSpeechSynthesis(opts = {}) {
   const [isSupported, setIsSupported] = useState(false);
   const [voices, setVoices] = useState([]);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -42,16 +42,27 @@ export function useSpeechSynthesis() {
     utterance.volume = 1.0;
 
     utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
+    utterance.onend = () => {
+      setIsSpeaking(false);
+      if (typeof opts.onEnd === 'function') {
+        opts.onEnd();
+      }
+    };
     utterance.onerror = () => setIsSpeaking(false);
 
     synth.speak(utterance);
-  }, [isSupported, voices]);
+  }, [isSupported, voices, opts]);
 
   const stop = useCallback(() => {
     if (!isSupported) return;
     window.speechSynthesis.cancel();
     setIsSpeaking(false);
+  }, [isSupported]);
+
+  const prime = useCallback(() => {
+    if (!isSupported) return;
+    const synth = window.speechSynthesis;
+    synth.resume();
   }, [isSupported]);
 
   return {
@@ -60,6 +71,7 @@ export function useSpeechSynthesis() {
     isSpeaking,
     speak,
     stop,
+    prime,
   };
 }
 

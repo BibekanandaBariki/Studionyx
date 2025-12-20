@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { ChevronLeft, ChevronRight, Download, Play, PauseCircle } from 'lucide-react';
 import AnimatedBorder from './AnimatedBorder.jsx';
 import GlassCard from './GlassCard.jsx';
@@ -33,39 +33,34 @@ const VideoSummary = ({ onError }) => {
   const [current, setCurrent] = useState(0);
   const [loading, setLoading] = useState(false);
   const [autoNarrating, setAutoNarrating] = useState(false);
-  // Ref to track if we just spoke, to trigger next slide on completion
-  const [wasSpeaking, setWasSpeaking] = useState(false);
+  const advanceTimeoutRef = useRef(null);
+  const sessionRef = useRef(0);
+  const speechEndRef = useRef(null);
 
-  const { isSupported: ttsSupported, isSpeaking, speak, stop, prime } = useSpeechSynthesis();
+  const { isSupported: ttsSupported, isSpeaking, speak, stop, prime } = useSpeechSynthesis({
+    onEnd: () => {
+      if (autoNarrating && speechEndRef.current === current) {
+        const next = current + 1;
+        if (next < slides.length) {
+          setCurrent(next);
+          const currentSession = sessionRef.current;
+          clearTimeout(advanceTimeoutRef.current);
+          advanceTimeoutRef.current = setTimeout(() => {
+            if (autoNarrating && sessionRef.current === currentSession) {
+              playSlide(next);
+            }
+          }, 800);
+        } else {
+          setAutoNarrating(false);
+        }
+      }
+      speechEndRef.current = null;
+    },
+  });
 
   useEffect(() => {
     return () => stop();
   }, [stop]);
-
-  // Auto-advance logic
-  useEffect(() => {
-    if (!autoNarrating) return;
-
-    if (isSpeaking) {
-      setWasSpeaking(true);
-    } else if (wasSpeaking) {
-      // Speech just finished
-      setWasSpeaking(false);
-
-      const next = current + 1;
-      if (next < slides.length) {
-        // Go to next slide
-        setCurrent(next);
-        // Small delay for pacing
-        setTimeout(() => {
-          playSlide(next);
-        }, 800);
-      } else {
-        // Finished all
-        setAutoNarrating(false);
-      }
-    }
-  }, [isSpeaking, autoNarrating, current, slides, wasSpeaking]); // Check deps carefully
 
   const ensureSummary = async () => {
     if (summary) return;
@@ -91,6 +86,7 @@ const VideoSummary = ({ onError }) => {
   const playSlide = (idx) => {
     if (!ttsSupported || !slides[idx]) return;
     const text = getSlideText(slides[idx]);
+    speechEndRef.current = idx;
     speak(text);
   };
 
@@ -98,17 +94,18 @@ const VideoSummary = ({ onError }) => {
     if (!slides.length) return;
     const next = (idx + slides.length) % slides.length;
     setCurrent(next);
-    setAutoNarrating(false); // Manual nav stops auto-play
+    setAutoNarrating(false);
     stop();
+    clearTimeout(advanceTimeoutRef.current);
+    sessionRef.current += 1;
+    speechEndRef.current = null;
 
-    // Optional: speak getting to new slide? User said "auto speak" issue manually?
-    // Let's just stop auto-narration to be safe.
   };
 
   const handleToggleNarration = async () => {
     if (!ttsSupported) return;
 
-    prime?.(); // Wake up audio engine
+    prime?.();
 
     if (!summary) {
       await ensureSummary();
@@ -118,9 +115,14 @@ const VideoSummary = ({ onError }) => {
     if (autoNarrating) {
       setAutoNarrating(false);
       stop();
+      clearTimeout(advanceTimeoutRef.current);
+      sessionRef.current += 1;
+      speechEndRef.current = null;
     } else {
+      stop();
+      clearTimeout(advanceTimeoutRef.current);
+      sessionRef.current += 1;
       setAutoNarrating(true);
-      // If we are at the end, restart. Otherwise play current.
       const target = current >= slides.length - 1 ? 0 : current;
       setCurrent(target);
       playSlide(target);
@@ -282,6 +284,4 @@ const VideoSummary = ({ onError }) => {
 };
 
 export default VideoSummary;
-
-
 
