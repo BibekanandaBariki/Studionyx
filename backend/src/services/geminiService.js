@@ -44,16 +44,14 @@ STRICT RULES:
 /**
  * Ensure study material is loaded.
  */
-function requireMaterial() {
+async function requireMaterial() {
   let material = storage.getStudyMaterial();
   if (!material || (!material.context && !material.contextParts)) {
     const sources = storage.getSources();
     if (sources && sources.length > 0) {
-      // Auto-ingest on-demand if sources exist but material not prepared
-      return ingestStudyMaterials(sources).then((m) => {
-        storage.setStudyMaterial(m);
-        return m;
-      });
+      const m = await ingestStudyMaterials(sources);
+      storage.setStudyMaterial(m);
+      return m;
     }
     const error = new Error('Study material not ingested yet');
     error.statusCode = 400;
@@ -73,25 +71,34 @@ function getContextParts(material) {
   return [{ text: material.context }];
 }
 
+function normalizeParts(parts) {
+  const out = [];
+  for (const p of parts || []) {
+    if (p && p.fileData && p.fileData.mimeType && p.fileData.fileUri) {
+      out.push({ fileData: { mimeType: p.fileData.mimeType, fileUri: p.fileData.fileUri } });
+    } else if (p && typeof p.text === 'string' && p.text.trim().length > 0) {
+      out.push({ text: p.text });
+    }
+  }
+  return out;
+}
 /**
  * Grounded Q&A mode.
  */
 export async function askQuestion(question) {
-  const material = requireMaterial();
+  const material = await requireMaterial();
   const model = getQAModel();
 
   const systemPrompt = buildSystemInstructions('qa');
   const contextParts = getContextParts(material);
+  const normalized = normalizeParts(contextParts);
 
   // Construct multimodal prompt
   // Parts: [System Instructions, ...Context Parts, Student Question]
-  const prompt = [
-    { text: systemPrompt },
-    ...contextParts,
-    { text: `\nStudent Question: ${question}` }
-  ];
+  const parts = [{ text: systemPrompt }, ...normalized, { text: `\nStudent Question: ${question}` }];
 
-  const result = await model.generateContent(prompt);
+  console.log("FINAL GEMINI PARTS (ask):", parts.map(p => Object.keys(p)));
+  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const text = result.response.text().trim();
 
   const isGrounded =
@@ -113,12 +120,13 @@ export async function askQuestion(question) {
  * Dialogue mode.
  */
 export async function dialogueTurn(message) {
-  const material = requireMaterial();
+  const material = await requireMaterial();
   const model = getDialogueModel();
 
   const history = storage.getHistory();
   const systemPrompt = buildSystemInstructions('dialogue');
   const contextParts = getContextParts(material);
+  const normalized = normalizeParts(contextParts);
 
   // Log for debugging
   console.log(`[Dialogue] Context parts: ${contextParts.length}, History: ${history.length}`);
@@ -130,14 +138,15 @@ export async function dialogueTurn(message) {
     )
     .join('\n');
 
-  const prompt = [
+  const parts = [
     { text: systemPrompt },
-    ...contextParts,
+    ...normalized,
     { text: `\nConversation so far:\n${historyText || '(no previous turns)'}` },
     { text: `\nNew student message: ${message}\nRespond as a friendly tutor in a conversational style. Keep it brief.` }
   ];
 
-  const result = await model.generateContent(prompt);
+  console.log("FINAL GEMINI PARTS (dialogue):", parts.map(p => Object.keys(p)));
+  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const text = result.response.text().trim();
 
   const entry = {
@@ -155,12 +164,13 @@ export async function dialogueTurn(message) {
  * Summary mode.
  */
 export async function generateSummary() {
-  const material = requireMaterial();
+  const material = await requireMaterial();
   const model = getSummaryModel();
 
   const systemPrompt = buildSystemInstructions('qa'); // Use QA strictness for summary
   const allContextParts = getContextParts(material);
   const contextParts = allContextParts;
+  const normalized = normalizeParts(contextParts);
 
   const summaryInstructions = `
 Task: Create a compact, exam-focused study summary split into:
@@ -177,13 +187,10 @@ Respond as strict JSON with the following shape:
 Use ALL provided study materials (PDFs and YouTube URLs). Incorporate key video insights where relevant. Cite sources inline: use "Page X (Physical)" for PDF items and "YouTube Video" when grounded in video content. Do not include markdown fences or extra prose.
 `.trim();
 
-  const prompt = [
-    { text: systemPrompt },
-    ...contextParts,
-    { text: summaryInstructions }
-  ];
+  const parts = [{ text: systemPrompt }, ...normalized, { text: summaryInstructions }];
 
-  const result = await model.generateContent(prompt);
+  console.log("FINAL GEMINI PARTS (summary):", parts.map(p => Object.keys(p)));
+  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const raw = result.response.text().trim();
 
   function extractJson(text) {
@@ -202,17 +209,13 @@ Use ALL provided study materials (PDFs and YouTube URLs). Incorporate key video 
     parsed = JSON.parse(jsonText);
   } catch (err) {
     console.error("JSON Parse Error:", err, "Raw Text:", raw);
-    const retryPrompt = [
+    const retryParts = [
       { text: systemPrompt },
-      ...contextParts,
-      {
-        text:
-          summaryInstructions +
-          "\nReturn ONLY strict JSON with keys overview, concepts, examTips. No code fences, no prose, no markdown.",
-      },
+      ...normalized,
+      { text: summaryInstructions + "\nReturn ONLY strict JSON with keys overview, concepts, examTips. No code fences, no prose, no markdown." },
     ];
     try {
-      const retryResult = await model.generateContent(retryPrompt);
+      const retryResult = await model.generateContent({ contents: [{ role: 'user', parts: retryParts }] });
       const retryRaw = retryResult.response.text().trim();
       const retryJsonText = extractJson(retryRaw);
       parsed = JSON.parse(retryJsonText);
@@ -236,28 +239,27 @@ Use ALL provided study materials (PDFs and YouTube URLs). Incorporate key video 
  * Generate suggested questions based on study material.
  */
 export async function generateSuggestedQuestions() {
-  const material = requireMaterial();
+  const material = await requireMaterial();
   const model = getQAModel(); // Use QA model (Flash) for speed
 
   const systemPrompt = buildSystemInstructions();
   const contextParts = getContextParts(material);
-
-  const prompt = [
+  const normalized = normalizeParts(contextParts);
+  const parts = [
     { text: systemPrompt },
-    ...contextParts,
-    {
-      text: `
+    ...normalized,
+    { text: `
 Task: Generate 4 short, distinct, exam-relevant questions based on the provided study material.
 These questions should help a student explore the key concepts.
 Keep them concise (under 10 words).
 
 Respond as a strict JSON array of strings:
 ["Question 1?", "Question 2?", ...]
-`.trim()
-    }
+`.trim() }
   ];
 
-  const result = await model.generateContent(prompt);
+  console.log("FINAL GEMINI PARTS (suggest):", parts.map(p => Object.keys(p)));
+  const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const raw = result.response.text().trim();
 
   // Best-effort JSON extraction

@@ -1,4 +1,5 @@
 import axios from 'axios';
+import pdfParse from 'pdf-parse';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import os from 'os';
@@ -48,6 +49,16 @@ export async function processDriveFile(driveUrl) {
       maxRedirects: 5,
     });
 
+    // Determine physical page count from PDF buffer
+    let physicalPages = null;
+    try {
+      const pdfData = await pdfParse(Buffer.from(response.data));
+      physicalPages = pdfData.numpages || pdfData.numPages || null;
+    } catch (e) {
+      // ignore parsing errors; not critical
+      physicalPages = null;
+    }
+
     // Create temp file
     const tempFilePath = path.join(os.tmpdir(), `drive_${fileId}.pdf`);
     fs.writeFileSync(tempFilePath, Buffer.from(response.data));
@@ -63,6 +74,7 @@ export async function processDriveFile(driveUrl) {
       fileUri: uploadResult.uri,
       mimeType: uploadResult.mimeType,
       name: `Google Drive PDF - ${fileId}`,
+      physicalPages,
     };
   } catch (error) {
     console.error('Error processing Drive file:', error.message);
@@ -168,6 +180,11 @@ export async function ingestStudyMaterials(sources = null) {
                 },
               };
               info.name = driveFile.name;
+              if (driveFile.physicalPages) {
+                processedParts.push({
+                  text: `\n=== SOURCE META: ${info.name} ===\nPhysical page count: ${driveFile.physicalPages}\nAlways cite using "Page X (Physical)" in the range 1-${driveFile.physicalPages}. Do not use printed page numbers if they differ from physical count.\n`
+                });
+              }
               break;
 
             case 'youtube':
@@ -218,6 +235,5 @@ export async function ingestStudyMaterials(sources = null) {
     throw error;
   }
 }
-
 
 
