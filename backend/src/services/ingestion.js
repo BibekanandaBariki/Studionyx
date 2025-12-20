@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { YoutubeTranscript } from 'youtube-transcript';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import os from 'os';
@@ -104,33 +103,7 @@ export async function processLocalFile(buffer, filename, mimetype) {
   }
 }
 
-/**
- * Format seconds to MM:SS
- */
-function formatTimestamp(seconds) {
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-/**
- * Fetch YouTube video transcript
- */
-export async function fetchTranscript(videoUrl) {
-  try {
-    const videoId = extractVideoId(videoUrl);
-    if (!videoId) {
-      throw new Error('Invalid YouTube URL');
-    }
-
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    return transcript.map(item => `[${formatTimestamp(item.offset)}] ${item.text}`).join('\n');
-  } catch (error) {
-    console.error('Error fetching transcript:', error.message);
-    // Don't fail the whole process if one video fails, just return error text
-    return `[Failed to fetch transcript for video ${videoUrl}: ${error.message}]`;
-  }
-}
+ 
 
 /**
  * Ingest all study materials and combine into multimodal context parts
@@ -198,8 +171,13 @@ export async function ingestStudyMaterials(sources = null) {
               break;
 
             case 'youtube':
-              const transcript = await fetchTranscript(source.url);
-              part = { text: `\n=== SOURCE: ${info.name} (YouTube) ===\n${transcript}\n` };
+              // DIRECT GEMINI VIDEO INGESTION (No scraping)
+              // We pass the URL directly to Gemini as text, instructing it to use the video.
+              // This avoids IP blocking/CAPTCHA issues on Render.
+              const videoId = extractVideoId(source.url);
+              part = {
+                text: `\n=== SOURCE: ${info.name} (YouTube Video) ===\nURL: ${source.url}\nVideo ID: ${videoId}\n[Instruction to Model: This is a YouTube video source. Please use your internal video understanding capabilities to access and analyze the content of this video from the provided URL.]\n`
+              };
               break;
 
             case 'text':
@@ -240,7 +218,6 @@ export async function ingestStudyMaterials(sources = null) {
     throw error;
   }
 }
-
 
 
 

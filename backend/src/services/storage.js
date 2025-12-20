@@ -77,6 +77,10 @@ class Storage {
   clearSources() {
     this.sources = [];
   }
+  
+  clearStudyMaterial() {
+    this.studyMaterial = null;
+  }
 
   getStats() {
     return {
@@ -93,4 +97,3 @@ class Storage {
 const storage = new Storage();
 
 export default storage;
-

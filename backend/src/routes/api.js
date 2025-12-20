@@ -105,16 +105,34 @@ router.post('/upload', async (req, res, next) => {
       metadata: result.metadata
     });
 
-    res.json({
-      success: true,
-      message: 'File uploaded successfully',
-      source: {
-        id: source.id,
-        name: source.fileName,
-        type: source.fileType,
-        size: source.size,
-      },
-    });
+    try {
+      const material = await ingestStudyMaterials(storage.getSources());
+      storage.setStudyMaterial(material);
+      res.json({
+        success: true,
+        message: 'File uploaded and study material ingested successfully',
+        source: {
+          id: source.id,
+          name: source.fileName,
+          type: source.fileType,
+          size: source.size,
+        },
+        stats: material.stats,
+        sources: material.sources,
+      });
+    } catch (ingestErr) {
+      res.json({
+        success: true,
+        message: 'File uploaded, but ingestion failed. Try /api/ingest.',
+        source: {
+          id: source.id,
+          name: source.fileName,
+          type: source.fileType,
+          size: source.size,
+        },
+        error: ingestErr.message,
+      });
+    }
   } catch (err) {
     next(err);
   }
@@ -155,15 +173,34 @@ router.post('/sources/add', async (req, res, next) => {
 
     const source = storage.addSource(sourceData);
 
-    res.json({
-      success: true,
-      message: 'Source added successfully',
-      source: {
-        id: source.id,
-        type: source.type,
-        name: source.name,
-      },
-    });
+    // Auto-ingest immediately so all endpoints use the latest sources
+    try {
+      const material = await ingestStudyMaterials(storage.getSources());
+      storage.setStudyMaterial(material);
+      res.json({
+        success: true,
+        message: 'Source added and study material ingested successfully',
+        source: {
+          id: source.id,
+          type: source.type,
+          name: source.name,
+        },
+        stats: material.stats,
+        sources: material.sources,
+      });
+    } catch (ingestErr) {
+      // If ingestion fails, still return the source addition and allow client to retry
+      res.json({
+        success: true,
+        message: 'Source added, but ingestion failed. Try /api/ingest.',
+        source: {
+          id: source.id,
+          type: source.type,
+          name: source.name,
+        },
+        error: ingestErr.message,
+      });
+    }
   } catch (err) {
     next(err);
   }
@@ -207,6 +244,7 @@ router.delete('/sources/:id', (req, res) => {
 // Clear all sources
 router.post('/sources/clear', (req, res) => {
   storage.clearSources();
+  storage.clearStudyMaterial();
   res.json({
     success: true,
     message: 'All sources cleared',
@@ -336,7 +374,5 @@ router.get('/stats', (req, res) => {
 });
 
 export default router;
-
-
 
 

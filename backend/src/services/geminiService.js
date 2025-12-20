@@ -1,4 +1,5 @@
 import storage from './storage.js';
+import { ingestStudyMaterials } from './ingestion.js';
 import { getQAModel, getDialogueModel, getSummaryModel } from '../config/gemini.js';
 
 /**
@@ -12,14 +13,15 @@ import { getQAModel, getDialogueModel, getSummaryModel } from '../config/gemini.
  */
 function buildSystemInstructions(type = 'qa') {
   const base = `
-You are an expert economics tutor. Answer based on the provided study material (files/texts).
+You are an expert economics tutor. Answer based on the provided study material (files/texts/videos).
 
 STRICT RULES:
-1. Use ONLY information from the attached files (PDFs, Videos, Texts)
-2. NO general knowledge or training data
-3. NO assumptions beyond material
-4. Always cite source provided
-5. PAGE NUMBERS: If the PDF has printed page numbers (e.g. 100+) that differ from the physical page count (e.g. 9 pages), ALWAYS cite the physical page number (1-9) as "Page X (Physical)" to avoid confusion.
+1. Use ONLY information from the attached files (PDFs, Texts) and provided YouTube Video URLs.
+2. For YouTube videos, analyze the content from the provided URL directly.
+3. NO general knowledge or training data (unless it comes from the provided sources).
+4. NO assumptions beyond material.
+5. Always cite source provided.
+6. PAGE NUMBERS: If the PDF has printed page numbers (e.g. 100+) that differ from the physical page count (e.g. 9 pages), ALWAYS cite the physical page number (1-9) as "Page X (Physical)" to avoid confusion.
 `.trim();
 
   if (type === 'dialogue') {
@@ -43,9 +45,16 @@ STRICT RULES:
  * Ensure study material is loaded.
  */
 function requireMaterial() {
-  const material = storage.getStudyMaterial();
-  // check for contextParts OR context (legacy)
+  let material = storage.getStudyMaterial();
   if (!material || (!material.context && !material.contextParts)) {
+    const sources = storage.getSources();
+    if (sources && sources.length > 0) {
+      // Auto-ingest on-demand if sources exist but material not prepared
+      return ingestStudyMaterials(sources).then((m) => {
+        storage.setStudyMaterial(m);
+        return m;
+      });
+    }
     const error = new Error('Study material not ingested yet');
     error.statusCode = 400;
     throw error;
@@ -151,14 +160,7 @@ export async function generateSummary() {
 
   const systemPrompt = buildSystemInstructions('qa'); // Use QA strictness for summary
   const allContextParts = getContextParts(material);
-
-  // Filter to use ONLY PDF (Drive) material for summary as requested
-  const pdfContextParts = allContextParts.filter(
-    (part) => part.inlineData && part.inlineData.mimeType === 'application/pdf'
-  );
-
-  // Fallback to all content if no PDF found (e.g. only YouTube loaded)
-  const contextParts = pdfContextParts.length > 0 ? pdfContextParts : allContextParts;
+  const contextParts = allContextParts;
 
   const summaryInstructions = `
 Task: Create a compact, exam-focused study summary split into:
@@ -172,6 +174,7 @@ Respond as strict JSON with the following shape:
   "concepts": ["string", "..."],
   "examTips": ["string", "..."]
 }
+Use ALL provided study materials (PDFs and YouTube URLs). Incorporate key video insights where relevant. Cite sources inline: use "Page X (Physical)" for PDF items and "YouTube Video" when grounded in video content. Do not include markdown fences or extra prose.
 `.trim();
 
   const prompt = [
@@ -183,33 +186,45 @@ Respond as strict JSON with the following shape:
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
 
-  // Robust JSON extraction
-  let jsonText = raw;
-  
-  // 1. Try to find content between ```json and ```
-  const codeBlockMatch = raw.match(/```json\s*([\s\S]*?)\s*```/i);
-  if (codeBlockMatch) {
-    jsonText = codeBlockMatch[1];
-  } else {
-    // 2. Fallback: Find first '{' and last '}'
-    const start = raw.indexOf('{');
-    const end = raw.lastIndexOf('}');
+  function extractJson(text) {
+    const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
     if (start !== -1 && end !== -1) {
-      jsonText = raw.substring(start, end + 1);
+      return cleaned.substring(start, end + 1);
     }
+    return cleaned;
   }
+  const jsonText = extractJson(raw);
 
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
   } catch (err) {
     console.error("JSON Parse Error:", err, "Raw Text:", raw);
-    parsed = {
-      overview: "Could not parse summary. Please try again.",
-      concepts: ["Error parsing concepts"],
-      examTips: ["Error parsing tips"],
-      raw_debug: raw // Optional: helps debug if it happens again
-    };
+    const retryPrompt = [
+      { text: systemPrompt },
+      ...contextParts,
+      {
+        text:
+          summaryInstructions +
+          "\nReturn ONLY strict JSON with keys overview, concepts, examTips. No code fences, no prose, no markdown.",
+      },
+    ];
+    try {
+      const retryResult = await model.generateContent(retryPrompt);
+      const retryRaw = retryResult.response.text().trim();
+      const retryJsonText = extractJson(retryRaw);
+      parsed = JSON.parse(retryJsonText);
+    } catch (err2) {
+      console.error("JSON Parse Error (Retry):", err2);
+      parsed = {
+        overview: "Could not parse summary. Please try again.",
+        concepts: ["Error parsing concepts"],
+        examTips: ["Error parsing tips"],
+        raw_debug: raw,
+      };
+    }
   }
 
   return {
@@ -285,7 +300,3 @@ export async function testGeminiConnection() {
     rawResponse: text,
   };
 }
-
-
-
-

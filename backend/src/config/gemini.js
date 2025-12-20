@@ -50,13 +50,12 @@ export const getSummaryModel = () => {
   return genAI.getGenerativeModel({
     model: MODEL_NAME,
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.0,
       topP: 0.8,
       topK: 20,
-      maxOutputTokens: 2048,
+      maxOutputTokens: 4096,
     },
   });
 };
 
 export default genAI;
-
