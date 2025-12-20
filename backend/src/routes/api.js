@@ -102,6 +102,7 @@ router.post('/upload', async (req, res, next) => {
       text: result.text,
       size: result.size,
       name: result.fileName,
+      metadata: result.metadata
     });
 
     res.json({
@@ -277,6 +278,34 @@ router.post('/suggest-questions', async (req, res, next) => {
       ...result,
     });
   } catch (err) {
+    // Handle specific error cases
+    if (err.statusCode === 400) {
+      // Material not ingested yet
+      return res.status(400).json({
+        success: false,
+        message: err.message,
+        questions: [
+          "Upload study material to get started",
+          "What topics would you like to learn?",
+          "Need help with anything?"
+        ]
+      });
+    }
+    
+    // For API errors (rate limiting, quota, network issues), return fallback
+    if (err.message?.includes('quota') || err.message?.includes('rate') || err.status === 503) {
+      console.error('Gemini API error:', err.message);
+      return res.status(200).json({
+        success: true,
+        questions: [
+          "What are the main concepts?",
+          "Can you explain this topic?",
+          "What should I focus on?",
+          "Help me understand this better"
+        ]
+      });
+    }
+    
     next(err);
   }
 });
@@ -307,6 +336,7 @@ router.get('/stats', (req, res) => {
 });
 
 export default router;
+
 
 
 

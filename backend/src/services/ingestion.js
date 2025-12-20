@@ -105,6 +105,15 @@ export async function processLocalFile(buffer, filename, mimetype) {
 }
 
 /**
+ * Format seconds to MM:SS
+ */
+function formatTimestamp(seconds) {
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+/**
  * Fetch YouTube video transcript
  */
 export async function fetchTranscript(videoUrl) {
@@ -115,7 +124,7 @@ export async function fetchTranscript(videoUrl) {
     }
 
     const transcript = await YoutubeTranscript.fetchTranscript(videoId);
-    return transcript.map(item => item.text).join(' ');
+    return transcript.map(item => `[${formatTimestamp(item.offset)}] ${item.text}`).join('\n');
   } catch (error) {
     console.error('Error fetching transcript:', error.message);
     // Don't fail the whole process if one video fails, just return error text
@@ -130,11 +139,22 @@ export async function fetchTranscript(videoUrl) {
 export async function ingestStudyMaterials(sources = null) {
   if (!sources || sources.length === 0) {
     // Fallback logic for env vars (legacy support, converted to text parts)
-    const pdfUrl = process.env.PDF_URL;
-    if (pdfUrl) {
-      // If we have legacy env vars, we might want to still try the new drive logic
-      sources = [{ type: 'drive', url: pdfUrl, name: 'Economics Textbook' }];
-    } else {
+    sources = [];
+    
+    if (process.env.PDF_URL) {
+      sources.push({ type: 'drive', url: process.env.PDF_URL, name: 'Economics Textbook' });
+    }
+    
+    // Auto-load YouTube links from .env
+    if (process.env.YOUTUBE_VIDEO_1) {
+      sources.push({ type: 'youtube', url: process.env.YOUTUBE_VIDEO_1, name: 'Oligopoly - Kinked Demand' });
+    }
+    
+    if (process.env.YOUTUBE_VIDEO_2) {
+      sources.push({ type: 'youtube', url: process.env.YOUTUBE_VIDEO_2, name: 'Oligopoly - Game Theory' });
+    }
+
+    if (sources.length === 0) {
       throw new Error('No sources provided');
     }
   }

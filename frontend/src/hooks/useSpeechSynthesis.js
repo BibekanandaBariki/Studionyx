@@ -1,115 +1,65 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 
 export function useSpeechSynthesis() {
   const [isSupported, setIsSupported] = useState(false);
-  const [isSpeaking, setIsSpeaking] = useState(false);
   const [voices, setVoices] = useState([]);
-
-  // CRITICAL: Must hold ref to utterance to prevent Garbage Collection (Chrome Bug)
-  const utteranceRef = useRef(null);
+  const [isSpeaking, setIsSpeaking] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      setIsSupported(true);
-
-      const loadVoices = () => {
-        const vs = window.speechSynthesis.getVoices();
-        console.log('TTS: Voices loaded', vs.length);
-        setVoices(vs);
-      };
-
-      // Load immediately and listen for changes
-      loadVoices();
-      window.speechSynthesis.onvoiceschanged = loadVoices;
-    }
-  }, []);
-
-  const speak = (text) => {
-    if (!isSupported) {
-      console.warn('TTS: Not supported');
+    if (!window.speechSynthesis) {
+      setIsSupported(false);
       return;
     }
-    if (!text || text.trim() === "") {
-      console.warn("TTS: No text to speak");
-      return;
-    }
+    setIsSupported(true);
 
     const synth = window.speechSynthesis;
+    const loadVoices = () => {
+      const list = synth.getVoices();
+      setVoices(list);
+    };
 
-    // 1. Stop any previous speech (Critical Best Practice)
+    loadVoices();
+    synth.onvoiceschanged = loadVoices;
+  }, []);
+
+  const speak = useCallback((text) => {
+    if (!isSupported || !text) return;
+
+    const synth = window.speechSynthesis;
     synth.cancel();
 
-    // 2. Create Utterance
     const utterance = new SpeechSynthesisUtterance(text);
-
-    // KEEP REF TO PREVENT GC
-    utteranceRef.current = utterance;
-
-    // 3. Configure Props
-    // Try to find a good English voice
-    const preferredVoice =
-      voices.find(v => v.lang === 'en-US' && v.name.includes('Google')) ||
-      voices.find(v => v.lang.startsWith('en')) ||
+    const preferred =
+      voices.find((v) => v.lang === 'en-US' && v.name.includes('Google')) ||
       voices[0];
 
-    if (preferredVoice) {
-      utterance.voice = preferredVoice;
+    if (preferred) {
+      utterance.voice = preferred;
     }
 
-    // Explicitly set language
-    utterance.lang = preferredVoice ? preferredVoice.lang : "en-US";
-    utterance.rate = 1;
-    utterance.pitch = 1;
-    utterance.volume = 1;
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    utterance.volume = 1.0;
 
-    // 4. Attach Events
-    utterance.onstart = () => {
-      console.log("TTS: Speech started");
-      setIsSpeaking(true);
-    };
+    utterance.onstart = () => setIsSpeaking(true);
+    utterance.onend = () => setIsSpeaking(false);
+    utterance.onerror = () => setIsSpeaking(false);
 
-    utterance.onend = () => {
-      console.log("TTS: Speech ended");
-      setIsSpeaking(false);
-      utteranceRef.current = null;
-    };
-
-    utterance.onerror = (e) => {
-      console.error("TTS: Speech error:", e);
-      setIsSpeaking(false);
-      utteranceRef.current = null;
-    };
-
-    // 5. Speak
-    console.log(`TTS: Speaking "${text.slice(0, 30)}..."`);
     synth.speak(utterance);
+  }, [isSupported, voices]);
 
-    // 6. Safety Resume (for Chrome Auto-play block)
-    if (synth.paused) {
-      console.log("TTS: Resuming paused synth");
-      synth.resume();
-    }
-  };
-
-  const stop = () => {
+  const stop = useCallback(() => {
     if (!isSupported) return;
     window.speechSynthesis.cancel();
-    utteranceRef.current = null;
     setIsSpeaking(false);
-  };
-
-  const prime = () => {
-    if (!isSupported) return;
-    window.speechSynthesis.resume();
-  };
+  }, [isSupported]);
 
   return {
     isSupported,
+    voices,
     isSpeaking,
     speak,
     stop,
-    prime,
-    voices // Exporting voices for debugging if needed
   };
 }
 

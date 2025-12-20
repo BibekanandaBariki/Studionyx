@@ -19,6 +19,7 @@ STRICT RULES:
 2. NO general knowledge or training data
 3. NO assumptions beyond material
 4. Always cite source provided
+5. PAGE NUMBERS: If the PDF has printed page numbers (e.g. 100+) that differ from the physical page count (e.g. 9 pages), ALWAYS cite the physical page number (1-9) as "Page X (Physical)" to avoid confusion.
 `.trim();
 
   if (type === 'dialogue') {
@@ -149,7 +150,15 @@ export async function generateSummary() {
   const model = getSummaryModel();
 
   const systemPrompt = buildSystemInstructions('qa'); // Use QA strictness for summary
-  const contextParts = getContextParts(material);
+  const allContextParts = getContextParts(material);
+
+  // Filter to use ONLY PDF (Drive) material for summary as requested
+  const pdfContextParts = allContextParts.filter(
+    (part) => part.inlineData && part.inlineData.mimeType === 'application/pdf'
+  );
+
+  // Fallback to all content if no PDF found (e.g. only YouTube loaded)
+  const contextParts = pdfContextParts.length > 0 ? pdfContextParts : allContextParts;
 
   const summaryInstructions = `
 Task: Create a compact, exam-focused study summary split into:
@@ -174,18 +183,32 @@ Respond as strict JSON with the following shape:
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
 
-  // Best‑effort JSON extraction
-  const jsonMatch = raw.match(/```json([\s\S]*?)```/i);
-  const jsonText = jsonMatch ? jsonMatch[1].trim() : raw;
+  // Robust JSON extraction
+  let jsonText = raw;
+  
+  // 1. Try to find content between ```json and ```
+  const codeBlockMatch = raw.match(/```json\s*([\s\S]*?)\s*```/i);
+  if (codeBlockMatch) {
+    jsonText = codeBlockMatch[1];
+  } else {
+    // 2. Fallback: Find first '{' and last '}'
+    const start = raw.indexOf('{');
+    const end = raw.lastIndexOf('}');
+    if (start !== -1 && end !== -1) {
+      jsonText = raw.substring(start, end + 1);
+    }
+  }
 
   let parsed;
   try {
     parsed = JSON.parse(jsonText);
-  } catch {
+  } catch (err) {
+    console.error("JSON Parse Error:", err, "Raw Text:", raw);
     parsed = {
-      overview: raw,
-      concepts: [],
-      examTips: [],
+      overview: "Could not parse summary. Please try again.",
+      concepts: ["Error parsing concepts"],
+      examTips: ["Error parsing tips"],
+      raw_debug: raw // Optional: helps debug if it happens again
     };
   }
 

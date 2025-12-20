@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight, Download, Play, PauseCircle } from 'lucide-r
 import AnimatedBorder from './AnimatedBorder.jsx';
 import GlassCard from './GlassCard.jsx';
 import LoadingState from './LoadingState.jsx';
-import useSpeechSynthesis from '../hooks/useSpeechSynthesis.js';
+import { useSpeechSynthesis } from '../hooks/useSpeechSynthesis.js';
 import { fetchSummary } from '../utils/api.js';
 
 const slidesFromSummary = (summary) => [

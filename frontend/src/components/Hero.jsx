@@ -63,6 +63,8 @@ const Hero = ({ onGetStarted }) => {
       const clock = new THREE.Clock();
 
       const animate = () => {
+        if (!canvasRef.current) return; // Stop if unmounted
+
         const elapsed = clock.getElapsedTime();
 
         particlesMesh.rotation.y = elapsed * 0.03;
@@ -75,14 +77,21 @@ const Hero = ({ onGetStarted }) => {
         requestAnimationFrame(animate);
       };
 
-      animate();
+      const animationId = requestAnimationFrame(animate);
 
       return () => {
+        cancelAnimationFrame(animationId); // Stop the loop
         window.removeEventListener('mousemove', onMouseMove);
         window.removeEventListener('resize', onResize);
+        
+        // Dispose resources
         particlesGeometry.dispose();
         particlesMaterial.dispose();
+        scene.remove(particlesMesh);
         renderer.dispose();
+        
+        // Force context loss handling if needed, though dispose usually suffices
+        // renderer.forceContextLoss(); 
       };
     } catch (error) {
       // eslint-disable-next-line no-console
