@@ -223,7 +223,7 @@ const SourceUpload = ({ onClose, onSourcesUpdated, showToast }) => {
                                     required
                                 />
                                 <p className="mt-1.5 text-xs text-slate-400">
-                                    Paste the YouTube video URL (transcript will be extracted)
+                                    Paste the YouTube video URL. We use the link directly (no transcript scraping).
                                 </p>
                             </div>
                             <button

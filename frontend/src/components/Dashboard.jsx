@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Brain, FileText, MessageCircleMore, Waves, FolderPlus } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Brain, FileText, MessageCircleMore, Waves, FolderPlus, ChevronDown, Plus, Trash2, Edit2, LayoutGrid, PanelLeftClose, PanelRightClose } from 'lucide-react';
 import Hero from './Hero.jsx';
 import QAChat from './QAChat.jsx';
 import VoiceDialogue from './VoiceDialogue.jsx';
@@ -7,7 +7,8 @@ import VideoSummary from './VideoSummary.jsx';
 import GlassCard from './GlassCard.jsx';
 import AnimatedBorder from './AnimatedBorder.jsx';
 import SourceUpload from './SourceUpload.jsx';
-import { ingestMaterials, fetchStats, fetchSuggestedQuestions } from '../utils/api.js';
+import SourceList from './SourceList.jsx';
+import { ingestMaterials, fetchStats, fetchSuggestedQuestions, fetchSources, listNotebooks, createNotebook, activateNotebook, renameNotebook, deleteNotebook, removeSource } from '../utils/api.js';
 import useToast from '../hooks/useToast.jsx';
 
 const Dashboard = () => {
@@ -17,8 +18,17 @@ const Dashboard = () => {
   const [showHero, setShowHero] = useState(true);
   const [showSourceUpload, setShowSourceUpload] = useState(false);
   const [sourceCount, setSourceCount] = useState(0);
+  const [sources, setSources] = useState([]);
   const [suggestedQuestions, setSuggestedQuestions] = useState([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const { showToast, ToastContainer } = useToast();
+  const [notebooks, setNotebooks] = useState([]);
+  const [activeNotebookId, setActiveNotebookId] = useState(null);
+  const [notebookMenuOpen, setNotebookMenuOpen] = useState(false);
+  const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const notebookDropdownRef = useRef(null);
+  const [rightCollapsed, setRightCollapsed] = useState(false);
+  const suggestionsRequestIdRef = useRef(0); // Track request IDs to prevent race conditions
 
   const handleError = (message) => {
     showToast(message, 'error');
@@ -29,16 +39,103 @@ const Dashboard = () => {
       const stats = await fetchStats();
       setMaterialLoaded(stats.materialLoaded);
       setSourceCount(stats.sourceCount || 0);
+      setActiveNotebookId(stats.activeNotebookId);
+      return stats;
     } catch (err) {
       // silent; shown only when ingesting fails
       // eslint-disable-next-line no-console
       console.warn('Stats error', err);
+      return null;
+    }
+  };
+
+  const loadSources = async () => {
+    try {
+      const data = await fetchSources();
+      setSources(data.sources || []);
+    } catch (err) {
+      console.warn('Sources error', err);
+    }
+  };
+
+  const loadNotebooks = async () => {
+    try {
+      const data = await listNotebooks();
+      setNotebooks(data.notebooks || []);
+      setActiveNotebookId(data.activeNotebookId || null);
+    } catch (err) {
+      console.warn('Notebooks error', err);
+    }
+  };
+
+  const loadSuggestedQuestions = async () => {
+    // Increment request ID to track this specific request
+    const currentRequestId = ++suggestionsRequestIdRef.current;
+    console.log(`[Dashboard] Loading suggested questions... (Request ID: ${currentRequestId})`);
+
+    setLoadingSuggestions(true);
+    try {
+      const sugg = await fetchSuggestedQuestions();
+      console.log(`[Dashboard] Suggested questions response (Request ID: ${currentRequestId}):`, sugg);
+
+      // Only update state if this is still the most recent request
+      if (currentRequestId === suggestionsRequestIdRef.current) {
+        if (sugg && sugg.questions && Array.isArray(sugg.questions)) {
+          console.log(`[Dashboard] Setting suggested questions (Request ID: ${currentRequestId}):`, sugg.questions);
+          setSuggestedQuestions(sugg.questions);
+        } else {
+          console.warn(`[Dashboard] Invalid suggested questions response (Request ID: ${currentRequestId}):`, sugg);
+          setSuggestedQuestions([]);
+        }
+      } else {
+        console.log(`[Dashboard] Ignoring stale response (Request ID: ${currentRequestId}, Current: ${suggestionsRequestIdRef.current})`);
+      }
+    } catch (e) {
+      console.error(`[Dashboard] Failed to fetch suggestions (Request ID: ${currentRequestId}):`, e);
+      // Only clear if this is still the most recent request
+      if (currentRequestId === suggestionsRequestIdRef.current) {
+        setSuggestedQuestions([]);
+      }
+    } finally {
+      // Only update loading state if this is still the most recent request
+      if (currentRequestId === suggestionsRequestIdRef.current) {
+        setLoadingSuggestions(false);
+        console.log(`[Dashboard] Finished loading suggested questions (Request ID: ${currentRequestId})`);
+      }
     }
   };
 
   useEffect(() => {
-    loadStats();
+    const initializeDashboard = async () => {
+      await loadStats();
+      await loadSources();
+      await loadNotebooks();
+
+      // Load suggested questions if material is already ingested
+      const stats = await loadStats();
+      if (stats?.materialLoaded) {
+        loadSuggestedQuestions();
+      }
+    };
+    initializeDashboard();
   }, []);
+
+  // Close notebook dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (notebookDropdownRef.current && !notebookDropdownRef.current.contains(event.target)) {
+        setNotebookMenuOpen(false);
+      }
+    };
+
+    if (notebookMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [notebookMenuOpen]);
 
   const fetchMoreSuggestions = async () => {
     try {
@@ -56,26 +153,83 @@ const Dashboard = () => {
     try {
       const res = await ingestMaterials();
       setMaterialLoaded(true);
-      showToast(`Study material ingested (${(res.stats.totalLength / 1000).toFixed(1)}k chars).`);
-
-      try {
-        const sugg = await fetchSuggestedQuestions();
-        if (sugg.questions) {
-          setSuggestedQuestions(sugg.questions);
-        }
-      } catch (e) {
-        console.warn('Failed to fetch suggestions', e);
+      if (res.stats && res.stats.totalLength) {
+        showToast(`Study material ingested (${(res.stats.totalLength / 1000).toFixed(1)}k chars).`);
+      } else {
+        showToast('Study material ingested.');
       }
+
+      // Load suggested questions after successful ingestion
+      await loadSuggestedQuestions();
 
     } catch (err) {
       handleError(err.message);
     } finally {
       setIngesting(false);
+      loadStats();
+      loadSources();
+    }
+  };
+
+  const handleCreateNotebook = async () => {
+    try {
+      const res = await createNotebook('New Notebook');
+      setActiveNotebookId(res.activeNotebookId);
+      showToast('Notebook created');
+      await loadNotebooks();
+      await loadSources();
+      await loadStats();
+    } catch (err) {
+      handleError(err.message);
+    }
+  };
+
+  const handleActivateNotebook = async (id) => {
+    try {
+      const res = await activateNotebook(id);
+      setActiveNotebookId(res.activeNotebookId);
+      setSuggestedQuestions([]);
+      showToast('Notebook activated');
+      await loadNotebooks();
+      await loadSources();
+      const stats = await loadStats();
+
+      // Load suggested questions for the newly activated notebook if it has material
+      if (stats?.materialLoaded) {
+        await loadSuggestedQuestions();
+      }
+    } catch (err) {
+      handleError(err.message);
+    }
+  };
+
+  const handleRenameNotebook = async (id) => {
+    const nb = notebooks.find(n => n.id === id);
+    const name = window.prompt('Rename notebook', nb?.name || '');
+    if (!name) return;
+    try {
+      await renameNotebook(id, name);
+      await loadNotebooks();
+      showToast('Notebook renamed');
+    } catch (err) {
+      handleError(err.message);
+    }
+  };
+
+  const handleDeleteNotebook = async (id) => {
+    try {
+      await deleteNotebook(id);
+      await loadNotebooks();
+      await loadSources();
+      await loadStats();
+      showToast('Notebook deleted');
+    } catch (err) {
+      handleError(err.message);
     }
   };
 
   const renderMode = () => {
-    if (mode === 'qa') return <QAChat onError={handleError} suggestedQuestions={suggestedQuestions} onRequestMoreSuggestions={fetchMoreSuggestions} />;
+    if (mode === 'qa') return <QAChat onError={handleError} suggestedQuestions={suggestedQuestions} loadingSuggestions={loadingSuggestions} onRequestMoreSuggestions={fetchMoreSuggestions} />;
     if (mode === 'voice') return <VoiceDialogue onError={handleError} />;
     return <VideoSummary onError={handleError} />;
   };
@@ -94,142 +248,264 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slatebg text-coolwhite">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:py-10">
-        <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              Interactive Study Tool
-              <span className="ml-2 rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs text-emerald-300">
-                NotebookLM Reimagined
-              </span>
-            </h1>
-            <p className="text-sm text-slate-300/80">
-              Grounded economics tutoring across Q&amp;A, voice dialogue, and video-style
-              summaries.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setShowSourceUpload(true)}
-              className="inline-flex items-center gap-2 rounded-full border border-blue-400/70 bg-blue-500/15 px-4 py-2 text-sm text-blue-200 hover:bg-blue-500/25 transition-colors"
-            >
-              <FolderPlus size={16} />
-              Manage Sources
-              {sourceCount > 0 && (
-                <span className="rounded-full bg-blue-400/30 px-2 py-0.5 text-xs font-medium">
-                  {sourceCount}
-                </span>
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={handleIngest}
-              disabled={ingesting}
-              className="inline-flex items-center gap-2 rounded-full border border-emerald-400/70 bg-emerald-500/15 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/25 disabled:opacity-60 transition-colors"
-            >
-              <FileText size={16} />
-              {ingesting ? 'Ingesting study material…' : 'Ingest study material'}
-            </button>
-            <span className="flex items-center gap-1 text-xs text-slate-300/80">
-              <span
-                className={`h-2 w-2 rounded-full ${materialLoaded ? 'bg-emerald-400' : 'bg-amber-400'
-                  }`}
-              />
-              {materialLoaded ? 'Material loaded' : 'Material not yet ingested'}
-            </span>
-          </div>
-        </header>
-
-        <main className="grid gap-5 md:grid-cols-[1.15fr,0.95fr]">
-          <section className="space-y-4">
-            {renderMode()}
-          </section>
-
-          <aside className="space-y-4">
-            <AnimatedBorder>
-              <div className="flex flex-col gap-4 p-4">
-                <div className="flex items-center gap-3">
-                  <Brain className="h-6 w-6 text-emerald-400" />
-                  <div>
-                    <h3 className="text-sm font-semibold text-coolwhite">
-                      Modes
-                    </h3>
-                    <p className="text-xs text-slate-300/80">
-                      Switch between grounded chat, voice, and summary flows.
-                    </p>
-                  </div>
+    <div className="h-screen w-screen overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-coolwhite">
+      <div className="grid h-full grid-rows-[auto_1fr]">
+        <header className="glass-effect border-b border-emerald-500/20 px-6 py-4 shadow-lg relative z-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg animate-glow">
+                  <Brain className="h-6 w-6 text-white" />
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setMode('qa')}
-                    className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-2 text-left transition-all ${mode === 'qa'
-                      ? 'border-emerald-400/70 bg-emerald-500/15'
-                      : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
-                      }`}
-                  >
-                    <MessageCircleMore size={16} className="text-emerald-300" />
-                    <span>Q&amp;A</span>
-                    <span className="text-[10px] text-slate-300/80">Text-first</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('voice')}
-                    className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-2 text-left transition-all ${mode === 'voice'
-                      ? 'border-emerald-400/70 bg-emerald-500/15'
-                      : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
-                      }`}
-                  >
-                    <Waves size={16} className="text-emerald-300" />
-                    <span>Voice</span>
-                    <span className="text-[10px] text-slate-300/80">Conversation</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMode('summary')}
-                    className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-2 text-left transition-all ${mode === 'summary'
-                      ? 'border-emerald-400/70 bg-emerald-500/15'
-                      : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
-                      }`}
-                  >
-                    <FileText size={16} className="text-emerald-300" />
-                    <span>Slides</span>
-                    <span className="text-[10px] text-slate-300/80">Exam view</span>
-                  </button>
+                <div>
+                  <h1 className="text-lg font-bold gradient-text">Interactive Study Tool</h1>
+                  <p className="text-[11px] text-slate-400">
+                    Grounded economics tutoring • Q&amp;A • Voice • Video Summaries
+                  </p>
                 </div>
               </div>
+              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium text-emerald-300 shadow-sm">
+                NotebookLM Reimagined
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={handleCreateNotebook}
+                className="group inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5"
+              >
+                <Plus size={16} className="group-hover:rotate-90 transition-transform" />
+                New Notebook
+              </button>
+              <div className="relative" ref={notebookDropdownRef}>
+                <button
+                  type="button"
+                  onClick={() => setNotebookMenuOpen((v) => !v)}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20"
+                >
+                  <LayoutGrid size={16} />
+                  Notebooks
+                  <ChevronDown size={14} className={`transition-transform ${notebookMenuOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {notebookMenuOpen && (
+                  <div className="absolute right-0 z-[60] mt-2 w-72 rounded-xl border border-slate-700/50 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+                    <div className="max-h-80 overflow-y-auto p-2">
+                      {notebooks.map(nb => (
+                        <div key={nb.id} className={`group flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-all ${activeNotebookId === nb.id ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800/50'}`}>
+                          <button
+                            type="button"
+                            onClick={() => { setNotebookMenuOpen(false); handleActivateNotebook(nb.id); }}
+                            className="flex-1 truncate text-left text-sm text-coolwhite hover:text-emerald-300 transition-colors"
+                            title={nb.name}
+                          >
+                            {activeNotebookId === nb.id && <span className="mr-2 text-emerald-400">●</span>}
+                            {nb.name}
+                          </button>
+                          <div className="flex items-center gap-1">
+                            {!nb.isDefault && (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRenameNotebook(nb.id)}
+                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-coolwhite"
+                                  title="Rename"
+                                >
+                                  <Edit2 size={14} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteNotebook(nb.id)}
+                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleIngest}
+                disabled={ingesting}
+                className="inline-flex h-10 items-center gap-2 rounded-xl border border-emerald-400/70 bg-gradient-to-r from-emerald-500/20 to-emerald-600/20 px-5 text-sm font-semibold text-emerald-200 shadow-lg transition-all hover:from-emerald-500/30 hover:to-emerald-600/30 hover:shadow-emerald-500/30 hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {ingesting ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-300 border-t-transparent" />
+                    Ingesting...
+                  </>
+                ) : (
+                  <>
+                    <FileText size={16} />
+                    Ingest Material
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </header>
+        <main className={`grid h-full overflow-hidden ${leftCollapsed && rightCollapsed ? 'grid-cols-[56px_1fr_56px]' : leftCollapsed ? 'grid-cols-[56px_1fr_280px]' : rightCollapsed ? 'grid-cols-[280px_1fr_56px]' : 'grid-cols-[280px_1fr_280px]'} gap-4 px-4 py-4`}>
+          <section className="h-full min-h-0">
+            <AnimatedBorder className="h-full">
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <FolderPlus className="h-5 w-5 text-emerald-400" />
+                    {!leftCollapsed && <span className="text-sm font-semibold">Sources</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setLeftCollapsed(v => !v)}
+                    className="rounded p-1 text-slate-400 hover:text-emerald-300"
+                    title={leftCollapsed ? 'Expand' : 'Collapse'}
+                  >
+                    {leftCollapsed ? <PanelLeftClose size={16} /> : <PanelLeftClose size={16} />}
+                  </button>
+                </div>
+                {!leftCollapsed && (
+                  <div className="flex flex-1 min-h-0 flex-col px-3 pb-2">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-300/80">Active: {notebooks.find(n => n.id === activeNotebookId)?.name || '—'}</span>
+                      <button
+                        type="button"
+                        onClick={() => setShowSourceUpload(true)}
+                        className="rounded-[10px] border border-blue-400/70 bg-blue-500/15 px-[14px] py-1 text-xs text-blue-200 hover:bg-blue-500/25 transition-colors"
+                      >
+                        Manage Sources
+                      </button>
+                    </div>
+                    <div className="sources-content flex-1 min-h-0 overflow-y-auto">
+                      <SourceList sources={sources} onRemove={async (id) => { try { await removeSource(id); await loadSources(); await loadStats(); showToast('Source removed'); } catch (e) { handleError(e.message); } }} />
+                    </div>
+                    <div className="mt-2 text-[11px] text-slate-300/70">
+                      {sourceCount} sources
+                    </div>
+                  </div>
+                )}
+              </div>
             </AnimatedBorder>
-
-            <GlassCard hover={false} className="bg-slate-900/50 text-xs leading-relaxed">
-              <h3 className="mb-2 text-sm font-semibold text-emerald-300">
-                Grounding contract
-              </h3>
-              <p className="mb-1 text-slate-200/90">
-                Every AI response is constrained to the ingested textbook chapter and two videos.
-              </p>
-              <p className="mb-1 text-slate-300/80">
-                If a concept is not covered there, the tutor explicitly says:
-              </p>
-              <p className="mb-2 italic text-emerald-200">
-                &quot;I don&apos;t have information about this topic in the provided study
-                material.&quot;
-              </p>
-              <p className="text-slate-300/80">
-                This keeps the tool accurate and exam-relevant, rather than hallucinating general
-                knowledge.
-              </p>
-            </GlassCard>
-          </aside>
+          </section>
+          <section className="h-full min-h-0">
+            {renderMode()}
+          </section>
+          <section className="h-full min-h-0">
+            <AnimatedBorder className="h-full">
+              <div className="flex h-full min-h-0 flex-col">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <Brain className="h-5 w-5 text-emerald-400" />
+                    {!rightCollapsed && <span className="text-sm font-semibold">Modes</span>}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setRightCollapsed(v => !v)}
+                    className="rounded p-1 text-slate-400 hover:text-emerald-300"
+                    title={rightCollapsed ? 'Expand' : 'Collapse'}
+                  >
+                    <PanelRightClose size={16} />
+                  </button>
+                </div>
+                {rightCollapsed && (
+                  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-1 py-2">
+                    <button
+                      type="button"
+                      onClick={() => setMode('qa')}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border ${mode === 'qa' ? 'border-emerald-400/70 bg-emerald-500/10' : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'}`}
+                      title="Q&A"
+                    >
+                      <MessageCircleMore size={16} className="text-emerald-300" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode('voice')}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border ${mode === 'voice' ? 'border-emerald-400/70 bg-emerald-500/10' : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'}`}
+                      title="Voice"
+                    >
+                      <Waves size={16} className="text-emerald-300" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode('summary')}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg border ${mode === 'summary' ? 'border-emerald-400/70 bg-emerald-500/10' : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'}`}
+                      title="Slides"
+                    >
+                      <FileText size={16} className="text-emerald-300" />
+                    </button>
+                  </div>
+                )}
+                {!rightCollapsed && (
+                  <div className="flex flex-1 flex-col gap-2 px-3 pb-2">
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setMode('qa')}
+                        className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-1.5 text-left transition-all ${mode === 'qa'
+                          ? 'border-emerald-400/70 bg-emerald-500/15'
+                          : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
+                          }`}
+                      >
+                        <MessageCircleMore size={16} className="text-emerald-300" />
+                        <span>Q&amp;A</span>
+                        <span className="text-[10px] text-slate-300/80">Text-first</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode('voice')}
+                        className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-1.5 text-left transition-all ${mode === 'voice'
+                          ? 'border-emerald-400/70 bg-emerald-500/15'
+                          : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
+                          }`}
+                      >
+                        <Waves size={16} className="text-emerald-300" />
+                        <span>Voice</span>
+                        <span className="text-[10px] text-slate-300/80">Conversation</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMode('summary')}
+                        className={`flex flex-col items-start gap-1 rounded-xl border px-3 py-1.5 text-left transition-all ${mode === 'summary'
+                          ? 'border-emerald-400/70 bg-emerald-500/15'
+                          : 'border-slate-600/60 bg-slate-900/60 hover:border-emerald-400/60'
+                          }`}
+                      >
+                        <FileText size={16} className="text-emerald-300" />
+                        <span>Slides</span>
+                        <span className="text-[10px] text-slate-300/80">Exam view</span>
+                      </button>
+                    </div>
+                    <GlassCard hover={false} className="bg-slate-900/50 text-xs leading-relaxed">
+                      <h3 className="mb-2 text-sm font-semibold text-emerald-300">
+                        Grounding contract
+                      </h3>
+                      <p className="mb-1 text-slate-200/90">
+                        Every AI response is constrained to the ingested study material.
+                      </p>
+                      <p className="mb-1 text-slate-300/80">
+                        If a concept is not covered there, the tutor explicitly says:
+                      </p>
+                      <p className="mb-2 italic text-emerald-200">
+                        &quot;I don&apos;t have information about this topic in the provided study
+                        material.&quot;
+                      </p>
+                    </GlassCard>
+                  </div>
+                )}
+              </div>
+            </AnimatedBorder>
+          </section>
         </main>
       </div>
       <ToastContainer />
-
       {showSourceUpload && (
         <SourceUpload
           onClose={() => setShowSourceUpload(false)}
-          onSourcesUpdated={loadStats}
+          onSourcesUpdated={async () => { await loadSources(); await loadStats(); }}
           showToast={showToast}
         />
       )}
@@ -238,5 +514,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-
-

@@ -18,6 +18,67 @@ router.get('/health', (req, res) => {
   });
 });
 
+// Notebooks
+router.get('/notebooks', (req, res) => {
+  res.json({
+    success: true,
+    activeNotebookId: storage.getStats().activeNotebookId,
+    notebooks: storage.listNotebooks(),
+  });
+});
+
+router.post('/notebooks', (req, res, next) => {
+  try {
+    const { name } = req.body || {};
+    const nb = storage.createNotebook(name || 'Untitled Notebook');
+    res.json({
+      success: true,
+      notebook: nb,
+      activeNotebookId: storage.getStats().activeNotebookId,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/notebooks/:id/activate', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    storage.setActiveNotebook(id);
+    storage.clearStudyMaterial();
+    res.json({
+      success: true,
+      activeNotebookId: storage.getStats().activeNotebookId,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/notebooks/:id/rename', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body || {};
+    const nb = storage.renameNotebook(id, name);
+    res.json({
+      success: true,
+      notebook: { id: nb.id, name: nb.name },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/notebooks/:id', (req, res, next) => {
+  try {
+    const { id } = req.params;
+    storage.deleteNotebook(id);
+    res.json({ success: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // Test Gemini connection
 router.get('/test-gemini', async (req, res, next) => {
   try {
@@ -229,10 +290,58 @@ router.delete('/sources/:id', (req, res) => {
   const removed = storage.removeSource(id);
 
   if (removed) {
-    res.json({
-      success: true,
-      message: 'Source removed successfully',
-    });
+    try {
+      const sources = storage.getSources();
+      if (sources.length > 0) {
+        ingestStudyMaterials(sources)
+          .then((material) => {
+            storage.setStudyMaterial(material);
+            res.json({
+              success: true,
+              message: 'Source removed and study material updated',
+              stats: material.stats,
+              sources: material.sources,
+            });
+          })
+          .catch(() => {
+            res.json({
+              success: true,
+              message: 'Source removed. Re-ingestion failed; try /api/ingest.',
+            });
+          });
+      } else {
+        if (storage.isDefaultActive()) {
+          ingestStudyMaterials(null)
+            .then((material) => {
+              storage.setStudyMaterial(material);
+              res.json({
+                success: true,
+                message: 'Source removed. Default notebook loaded from environment',
+                stats: material.stats,
+                sources: material.sources,
+              });
+            })
+            .catch(() => {
+              storage.clearStudyMaterial();
+              res.json({
+                success: true,
+                message: 'Source removed. No sources available; study material cleared.',
+              });
+            });
+        } else {
+          storage.clearStudyMaterial();
+          res.json({
+            success: true,
+            message: 'Source removed. No sources in active notebook; study material cleared.',
+          });
+        }
+      }
+    } catch {
+      res.json({
+        success: true,
+        message: 'Source removed. Unable to update study material.',
+      });
+    }
   } else {
     res.status(404).json({
       success: false,
@@ -308,17 +417,26 @@ router.post('/summary', async (req, res, next) => {
 
 // Suggest questions endpoint
 router.post('/suggest-questions', async (req, res, next) => {
+  console.log('[API] /suggest-questions called');
   try {
     const { generateSuggestedQuestions } = await import('../services/geminiService.js');
+    console.log('[API] Calling generateSuggestedQuestions...');
     const result = await generateSuggestedQuestions();
-    res.json({
+    console.log('[API] generateSuggestedQuestions result:', result);
+
+    const response = {
       success: true,
       ...result,
-    });
+    };
+    console.log('[API] Sending response:', response);
+    res.json(response);
   } catch (err) {
+    console.error('[API] Error in /suggest-questions:', err.message);
+
     // Handle specific error cases
     if (err.statusCode === 400) {
       // Material not ingested yet
+      console.log('[API] Material not ingested, returning fallback questions');
       return res.status(400).json({
         success: false,
         message: err.message,
@@ -329,10 +447,10 @@ router.post('/suggest-questions', async (req, res, next) => {
         ]
       });
     }
-    
+
     // For API errors (rate limiting, quota, network issues), return fallback
     if (err.message?.includes('quota') || err.message?.includes('rate') || err.status === 503) {
-      console.error('Gemini API error:', err.message);
+      console.error('[API] Gemini API error, returning fallback questions:', err.message);
       return res.status(200).json({
         success: true,
         questions: [
@@ -343,7 +461,8 @@ router.post('/suggest-questions', async (req, res, next) => {
         ]
       });
     }
-    
+
+    console.error('[API] Unhandled error, passing to error handler');
     next(err);
   }
 });
@@ -374,5 +493,3 @@ router.get('/stats', (req, res) => {
 });
 
 export default router;
-
-

@@ -62,9 +62,9 @@ const VoiceDialogue = ({ onError }) => {
 
     setMicEnabled(prev => !prev);
     if (micEnabled) {
-        // Turning off
-        stop();
-        reset();
+      // Turning off
+      stop();
+      reset();
     }
   };
 
@@ -82,14 +82,14 @@ const VoiceDialogue = ({ onError }) => {
     // 1. If speaking (TTS), stop mic.
     // 2. If processing (API), stop mic.
     // 3. Otherwise, ensure mic is started.
-    
+
     if (isSpeaking || isProcessing) {
-        if (micStatus === 'active') stop();
+      if (micStatus === 'active') stop();
     } else {
-        // Only try to start if we are not already active/initializing and not in error state
-        if (micStatus === 'idle') {
-             start();
-        }
+      // Only try to start if we are not already active/initializing and not in error state
+      if (micStatus === 'idle') {
+        start();
+      }
     }
     // Remove start/stop from dependencies to avoid loop
     // Rely on micEnabled/isSpeaking/isProcessing/micStatus changes
@@ -99,12 +99,12 @@ const VoiceDialogue = ({ onError }) => {
   // Show errors from hook
   useEffect(() => {
     if (errorMessage) {
-        // If fatal error, disable mic intent
-        if (micStatus === 'error') {
-            setMicEnabled(false);
-        }
-        // Only report if it's a new error string to avoid loops with unstable onError prop
-        onError?.(errorMessage);
+      // If fatal error, disable mic intent
+      if (micStatus === 'error') {
+        setMicEnabled(false);
+      }
+      // Only report if it's a new error string to avoid loops with unstable onError prop
+      onError?.(errorMessage);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [errorMessage, micStatus]); // Exclude onError to prevent infinite updates if parent doesn't memoize it
@@ -117,7 +117,7 @@ const VoiceDialogue = ({ onError }) => {
     setIsProcessing(true);
     setLoading(true);
     // Note: Effect will auto-stop mic here
-    
+
     try {
       const res = await dialogueTurn(message);
       setHistory((prev) => [...prev, res]);
@@ -128,8 +128,8 @@ const VoiceDialogue = ({ onError }) => {
       if (ttsSupported) {
         // Small delay to let UI settle
         setTimeout(() => {
-            speak(res.teacherResponse);
-            // After speech ends, effect will auto-start mic
+          speak(res.teacherResponse);
+          // After speech ends, effect will auto-start mic
         }, 100);
       }
     } catch (err) {
@@ -152,13 +152,23 @@ const VoiceDialogue = ({ onError }) => {
             </p>
           </div>
           <div className="flex items-center gap-2 text-[10px] text-slate-300/80">
+            {isSpeaking && (
+              <button
+                type="button"
+                onClick={stopSpeak}
+                className="inline-flex items-center gap-1 rounded-full border border-red-400/60 bg-red-500/10 px-3 py-1.5 text-xs text-red-300 hover:bg-red-500/20 transition-colors animate-pulse-soft"
+              >
+                <Volume2 size={14} className="animate-pulse" />
+                Stop Speaking
+              </button>
+            )}
             <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 ${micStatus === 'error'
-                ? 'border-amber-400/50 bg-amber-500/10 text-amber-300'
-                : micStatus === 'active'
-                  ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-300'
-                  : micSupported
-                    ? 'border-emerald-400/50 px-2 py-0.5'
-                    : 'border-slate-400/50 bg-slate-500/10 text-slate-300'
+              ? 'border-amber-400/50 bg-amber-500/10 text-amber-300'
+              : micStatus === 'active'
+                ? 'border-emerald-400/50 bg-emerald-500/10 text-emerald-300'
+                : micSupported
+                  ? 'border-emerald-400/50 px-2 py-0.5'
+                  : 'border-slate-400/50 bg-slate-500/10 text-slate-300'
               }`}>
               {micStatus === 'error' ? (
                 <>
@@ -216,8 +226,8 @@ const VoiceDialogue = ({ onError }) => {
                 onClick={handleToggleMic}
                 disabled={!micSupported || micStatus === 'error'}
                 className={`relative inline-flex h-16 w-16 items-center justify-center rounded-full border-2 bg-slate-900/80 text-emerald-300 shadow-xl transition-all duration-200 ${micEnabled
-                    ? 'border-emerald-400/70 scale-105 shadow-emerald-500/60'
-                    : 'border-emerald-400/70 hover:scale-105'
+                  ? 'border-emerald-400/70 scale-105 shadow-emerald-500/60'
+                  : 'border-emerald-400/70 hover:scale-105'
                   } ${!micSupported || micStatus === 'error' ? 'opacity-40 cursor-not-allowed' : ''
                   }`}
               >

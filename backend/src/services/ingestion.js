@@ -1,10 +1,11 @@
 import axios from 'axios';
-import pdfParse from 'pdf-parse';
 import dotenv from 'dotenv';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import pdfParse from 'pdf-parse';
 import { uploadToGemini } from './fileManager.js';
+import storage from './storage.js';
 
 dotenv.config();
 
@@ -115,7 +116,7 @@ export async function processLocalFile(buffer, filename, mimetype) {
   }
 }
 
- 
+
 
 /**
  * Ingest all study materials and combine into multimodal context parts
@@ -123,22 +124,19 @@ export async function processLocalFile(buffer, filename, mimetype) {
  */
 export async function ingestStudyMaterials(sources = null) {
   if (!sources || sources.length === 0) {
-    // Fallback logic for env vars (legacy support, converted to text parts)
+    if (!storage.isDefaultActive()) {
+      throw new Error('No sources provided for active notebook');
+    }
     sources = [];
-    
     if (process.env.PDF_URL) {
       sources.push({ type: 'drive', url: process.env.PDF_URL, name: 'Economics Textbook' });
     }
-    
-    // Auto-load YouTube links from .env
     if (process.env.YOUTUBE_VIDEO_1) {
       sources.push({ type: 'youtube', url: process.env.YOUTUBE_VIDEO_1, name: 'Oligopoly - Kinked Demand' });
     }
-    
     if (process.env.YOUTUBE_VIDEO_2) {
       sources.push({ type: 'youtube', url: process.env.YOUTUBE_VIDEO_2, name: 'Oligopoly - Game Theory' });
     }
-
     if (sources.length === 0) {
       throw new Error('No sources provided');
     }
@@ -235,5 +233,3 @@ export async function ingestStudyMaterials(sources = null) {
     throw error;
   }
 }
-
-

@@ -1,17 +1,24 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ClipboardCopy, CornerDownLeft, RefreshCw, Trash2 } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import AnimatedBorder from './AnimatedBorder.jsx';
 import LoadingState from './LoadingState.jsx';
 import { askQuestion } from '../utils/api.js';
 
-const QAChat = ({ onError, suggestedQuestions = [], onSuggestionClick, onRequestMoreSuggestions }) => {
+const QAChat = ({ onError, suggestedQuestions = [], loadingSuggestions = false, onSuggestionClick, onRequestMoreSuggestions }) => {
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [usedQuestions, setUsedQuestions] = useState([]);
 
   const activeSuggestions = suggestedQuestions.filter(q => !usedQuestions.includes(q));
+
+  // Debug logging
+  useEffect(() => {
+    console.log('[QAChat] Suggested questions updated:', suggestedQuestions);
+    console.log('[QAChat] Active suggestions:', activeSuggestions);
+    console.log('[QAChat] Loading suggestions:', loadingSuggestions);
+  }, [suggestedQuestions, loadingSuggestions]);
 
   const handleAsk = async (questionOverride) => {
     const textToAsk = typeof questionOverride === 'string' ? questionOverride : question;
@@ -104,67 +111,78 @@ const QAChat = ({ onError, suggestedQuestions = [], onSuggestionClick, onRequest
           </div>
         </div>
 
-        <GlassCard className="flex-1 min-h-[220px] overflow-y-auto bg-slate-900/40">
-          {messages.length === 0 && !loading && (
-            <p className="text-sm text-slate-300/80 mb-6">
-              Ask anything about the uploaded economics chapter or the two lecture videos. The AI
-              will only answer using that material.
-            </p>
-          )}
-
-          <div className="space-y-4">
-            {messages.map((m, index) => (
-              // eslint-disable-next-line react/no-array-index-key
-              <div key={index} className="flex flex-col gap-1">
-                <div
-                  className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user'
-                    ? 'ml-auto bg-emerald-500/90 text-slate-900'
-                    : 'mr-auto bg-slate-800/80 text-slate-50'
-                    }`}
-                >
-                  {m.content}
+        <GlassCard className="flex-1 min-h-0 bg-slate-900/40">
+          <div className="flex h-full min-h-0 flex-col">
+            <div className="flex-1 overflow-y-auto space-y-4">
+              {messages.length === 0 && !loading && (
+                <div className="empty-state flex h-full items-center justify-center opacity-60 text-center">
+                  <p className="text-sm text-slate-300/80">
+                    Add study material to begin&nbsp;<span className="font-medium text-emerald-300">grounded learning</span>.
+                  </p>
                 </div>
-                {m.role === 'assistant' && m.meta && (
-                  <div className="ml-1 flex items-center gap-2 text-[10px] text-slate-300/70">
-                    <span
-                      className={`rounded-full border px-2 py-0.5 ${m.meta.isGrounded
-                        ? 'border-emerald-400/60 text-emerald-300'
-                        : 'border-amber-400/60 text-amber-300'
-                        }`}
-                    >
-                      {m.meta.isGrounded ? 'Grounded in material' : 'Not clearly grounded'}
-                    </span>
-                    {m.meta.sources && (
-                      <span className="truncate">
-                        Sources: {m.meta.sources.join(', ')}
-                      </span>
-                    )}
+              )}
+
+              {messages.map((m, index) => (
+                // eslint-disable-next-line react/no-array-index-key
+                <div key={index} className="flex flex-col gap-1">
+                  <div
+                    className={`max-w-[90%] rounded-2xl px-3 py-2 text-sm ${m.role === 'user'
+                      ? 'ml-auto bg-emerald-500/90 text-slate-900'
+                      : 'mr-auto bg-slate-800/80 text-slate-50'
+                      }`}
+                  >
+                    {m.content}
                   </div>
-                )}
-              </div>
-            ))}
-            {loading && <LoadingState lines={4} />}
-
-            {/* Suggested Questions - Always visible if there are active ones */}
-            {activeSuggestions.length > 0 && !loading && (
-              <div className="pt-4 space-y-2">
-                <p className="text-xs font-medium text-emerald-300/80 uppercase tracking-wider">
-                  {messages.length === 0 ? 'Suggested Questions' : 'Related Questions'}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {activeSuggestions.map((q, i) => (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => handleSuggestionClick(q)}
-                      className="rounded-xl border border-slate-700 bg-slate-800/50 px-3 py-2 text-xs text-slate-200 hover:border-emerald-500/50 hover:bg-emerald-500/10 hover:text-emerald-300 transition-all text-left"
-                    >
-                      {q}
-                    </button>
-                  ))}
+                  {m.role === 'assistant' && m.meta && (
+                    <div className="ml-1 flex items-center gap-2 text-[10px] text-slate-300/70">
+                      <span
+                        className={`rounded-full border px-2 py-0.5 ${m.meta.isGrounded
+                          ? 'border-emerald-400/60 text-emerald-300'
+                          : 'border-amber-400/60 text-amber-300'
+                          }`}
+                      >
+                        {m.meta.isGrounded ? 'Grounded in material' : 'Not clearly grounded'}
+                      </span>
+                      {m.meta.sources && (
+                        <span className="truncate">
+                          Sources: {m.meta.sources.join(', ')}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              ))}
+              {loading && <LoadingState lines={4} />}
+            </div>
+            <div className="pt-4 space-y-3">
+              {loadingSuggestions && (
+                <div className="flex items-center gap-2 text-xs text-emerald-400">
+                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                  <span>Loading suggested questions...</span>
+                </div>
+              )}
+              {!loadingSuggestions && activeSuggestions.length > 0 && !loading && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-emerald-300/90 uppercase tracking-wider flex items-center gap-2">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
+                    {messages.length === 0 ? 'Suggested Questions' : 'Related Questions'}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {activeSuggestions.map((q, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => handleSuggestionClick(q)}
+                        className="group rounded-xl border border-slate-700/70 bg-gradient-to-br from-slate-800/60 to-slate-800/40 px-3 py-2.5 text-xs text-slate-200 shadow-sm transition-all hover:border-emerald-500/60 hover:from-emerald-500/15 hover:to-emerald-600/10 hover:text-emerald-300 hover:shadow-emerald-500/20 hover:-translate-y-0.5 text-left"
+                      >
+                        <span className="opacity-0 group-hover:opacity-100 transition-opacity mr-1">→</span>
+                        {q}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </GlassCard>
 
@@ -231,6 +249,3 @@ const QAChat = ({ onError, suggestedQuestions = [], onSuggestionClick, onRequest
 };
 
 export default QAChat;
-
-
-

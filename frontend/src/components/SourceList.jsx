@@ -3,8 +3,8 @@ import { FileText, Link as LinkIcon, Trash2, Youtube } from 'lucide-react';
 const SourceList = ({ sources, onRemove }) => {
     if (!sources || sources.length === 0) {
         return (
-            <div className="rounded-lg border border-slate-700/50 bg-slate-900/30 p-4 text-center text-sm text-slate-400">
-                No sources added yet
+            <div className="sources-empty flex h-full items-center justify-center px-4 text-center text-sm text-slate-300/70 opacity-60">
+                Add study material to this notebook.
             </div>
         );
     }
@@ -36,7 +36,7 @@ const SourceList = ({ sources, onRemove }) => {
     return (
         <div className="space-y-2">
             <h4 className="text-xs font-medium text-slate-300">Added Sources ({sources.length})</h4>
-            <div className="max-h-60 space-y-2 overflow-y-auto">
+            <div className="space-y-2">
                 {sources.map((source) => (
                     <div
                         key={source.id}

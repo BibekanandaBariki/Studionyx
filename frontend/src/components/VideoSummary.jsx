@@ -78,9 +78,16 @@ const VideoSummary = ({ onError }) => {
 
   const getSlideText = (slide) => {
     if (!slide) return '';
-    return slide.type === 'overview'
-      ? slide.content
-      : Array.isArray(slide.content) ? slide.content.join('. ') : slide.content;
+    if (slide.type === 'overview') {
+      return slide.content;
+    }
+    // Handle both string and object formats in arrays
+    if (Array.isArray(slide.content)) {
+      return slide.content
+        .map(item => typeof item === 'string' ? item : (item.explanation || item.title || ''))
+        .join('. ');
+    }
+    return slide.content;
   };
 
   const playSlide = (idx) => {
@@ -134,10 +141,14 @@ const VideoSummary = ({ onError }) => {
       await ensureSummary();
     }
     if (!summary) return;
+
+    // Helper to extract text from string or object
+    const getText = (item) => typeof item === 'string' ? item : (item.explanation || item.title || '');
+
     const content = `Overview\n--------\n${summary.overview}\n\nKey Concepts\n------------\n${summary.concepts
-      .map((c, i) => `${i + 1}. ${c}`)
+      .map((c, i) => `${i + 1}. ${getText(c)}`)
       .join('\n')}\n\nExam Tips\n---------\n${summary.examTips
-        .map((t, i) => `${i + 1}. ${t}`)
+        .map((t, i) => `${i + 1}. ${getText(t)}`)
         .join('\n')}\n`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -173,22 +184,28 @@ const VideoSummary = ({ onError }) => {
           </div>
         </div>
 
-        <GlassCard className="flex-1 bg-slate-900/40">
+        <GlassCard className="flex-1 min-h-0 bg-slate-900/40">
           {!summary && !loading && (
-            <button
-              type="button"
-              onClick={ensureSummary}
-              className="mb-4 inline-flex items-center gap-2 rounded-full border border-emerald-400/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10 transition-colors"
-            >
-              Generate summary from material
-            </button>
+            <div className="flex h-full items-center justify-center">
+              <button
+                type="button"
+                onClick={ensureSummary}
+                className="inline-flex items-center gap-2 rounded-full border border-emerald-400/60 px-4 py-2 text-sm text-emerald-200 hover:bg-emerald-500/10 transition-colors"
+              >
+                Generate summary from material
+              </button>
+            </div>
           )}
 
-          {loading && <LoadingState lines={5} />}
+          {loading && (
+            <div className="flex h-full items-center justify-center">
+              <LoadingState lines={5} />
+            </div>
+          )}
 
           {summary && currentSlide && (
             <div className="flex h-full flex-col">
-              <div className="mb-4 flex items-center justify-between gap-3">
+              <div className="flex-shrink-0 mb-4 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/90 text-slate-900 text-sm font-semibold shadow-lg">
                     {current + 1}
@@ -223,32 +240,40 @@ const VideoSummary = ({ onError }) => {
                 )}
               </div>
 
-              <div className="flex-1 rounded-2xl bg-slate-900/70 p-4 text-sm text-slate-100">
+              <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-slate-900/70 p-4 text-sm text-slate-100 scrollbar-thin scrollbar-thumb-emerald-500/50 scrollbar-track-slate-800/50 hover:scrollbar-thumb-emerald-500/70">
                 {currentSlide.type === 'overview' && (
                   <p className="leading-relaxed">{summary.overview}</p>
                 )}
                 {currentSlide.type === 'concepts' && (
-                  <ol className="list-decimal space-y-2 pl-5">
-                    {summary.concepts.map((c, i) => (
-                      // eslint-disable-next-line react/no-array-index-key
-                      <li key={i}>{c}</li>
-                    ))}
+                  <ol className="list-decimal space-y-3 pl-5">
+                    {summary.concepts.map((c, i) => {
+                      // Handle both string and object formats
+                      const conceptText = typeof c === 'string' ? c : (c.explanation || c.title || JSON.stringify(c));
+                      return (
+                        // eslint-disable-next-line react/no-array-index-key
+                        <li key={i} className="leading-relaxed">{conceptText}</li>
+                      );
+                    })}
                   </ol>
                 )}
                 {currentSlide.type === 'tips' && (
-                  <ul className="space-y-2">
-                    {summary.examTips.map((t, i) => (
-                      // eslint-disable-next-line react/no-array-index-key
-                      <li key={i} className="flex items-start gap-2">
-                        <span className="mt-[3px] h-2 w-2 rounded-full bg-emerald-400" />
-                        <span>{t}</span>
-                      </li>
-                    ))}
+                  <ul className="space-y-3">
+                    {summary.examTips.map((t, i) => {
+                      // Handle both string and object formats
+                      const tipText = typeof t === 'string' ? t : (t.explanation || t.title || JSON.stringify(t));
+                      return (
+                        // eslint-disable-next-line react/no-array-index-key
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="mt-[3px] h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400" />
+                          <span className="leading-relaxed">{tipText}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </div>
 
-              <div className="mt-4 flex items-center justify-between text-[11px] text-slate-300/80">
+              <div className="flex-shrink-0 mt-4 flex items-center justify-between text-[11px] text-slate-300/80">
                 <div className="flex items-center gap-2">
                   <button
                     type="button"

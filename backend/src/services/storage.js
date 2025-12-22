@@ -3,14 +3,86 @@
 
 class Storage {
   constructor() {
-    this.studyMaterial = null;
-    this.conversationHistory = [];
-    this.qaHistory = [];
-    this.sources = []; // Array of sources (files, links, text)
+    this.notebooks = new Map();
+    this.activeNotebookId = null;
+    this._initDefaultNotebook();
+  }
+
+  _initDefaultNotebook() {
+    const id = 'default';
+    const notebook = {
+      id,
+      name: 'Default Notebook',
+      isDefault: true,
+      createdAt: new Date().toISOString(),
+      sources: [],
+      studyMaterial: null,
+      conversationHistory: [],
+      qaHistory: [],
+    };
+    this.notebooks.set(id, notebook);
+    this.activeNotebookId = id;
+  }
+
+  _getActiveNotebook() {
+    return this.notebooks.get(this.activeNotebookId);
+  }
+
+  setActiveNotebook(id) {
+    if (!this.notebooks.has(id)) throw new Error('Notebook not found');
+    this.activeNotebookId = id;
+  }
+
+  listNotebooks() {
+    return Array.from(this.notebooks.values()).map(n => ({
+      id: n.id,
+      name: n.name,
+      isDefault: !!n.isDefault,
+      createdAt: n.createdAt,
+      sourceCount: n.sources.length,
+    }));
+  }
+
+  createNotebook(name = 'Untitled Notebook') {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const notebook = {
+      id,
+      name,
+      isDefault: false,
+      createdAt: new Date().toISOString(),
+      sources: [],
+      studyMaterial: null,
+      conversationHistory: [],
+      qaHistory: [],
+    };
+    this.notebooks.set(id, notebook);
+    this.activeNotebookId = id;
+    return notebook;
+  }
+
+  renameNotebook(id, name) {
+    const nb = this.notebooks.get(id);
+    if (!nb) throw new Error('Notebook not found');
+    if (nb.isDefault) throw new Error('Default Notebook cannot be renamed');
+    nb.name = name;
+    return nb;
+  }
+
+  deleteNotebook(id) {
+    const nb = this.notebooks.get(id);
+    if (!nb) throw new Error('Notebook not found');
+    if (nb.isDefault) throw new Error('Default Notebook cannot be deleted');
+    const wasActive = this.activeNotebookId === id;
+    this.notebooks.delete(id);
+    if (wasActive) {
+      this.activeNotebookId = 'default';
+    }
+    return true;
   }
 
   setStudyMaterial(material) {
-    this.studyMaterial = {
+    const nb = this._getActiveNotebook();
+    nb.studyMaterial = {
       context: material.context,
       contextParts: material.contextParts,
       sources: material.sources || [],
@@ -20,75 +92,95 @@ class Storage {
   }
 
   getStudyMaterial() {
-    return this.studyMaterial;
+    const nb = this._getActiveNotebook();
+    return nb.studyMaterial;
   }
 
   addToHistory(entry) {
-    this.conversationHistory.push({
+    const nb = this._getActiveNotebook();
+    nb.conversationHistory.push({
       ...entry,
       timestamp: new Date().toISOString(),
     });
   }
 
   getHistory() {
-    return this.conversationHistory;
+    const nb = this._getActiveNotebook();
+    return nb.conversationHistory;
   }
 
   addQAEntry(entry) {
-    this.qaHistory.push({
+    const nb = this._getActiveNotebook();
+    nb.qaHistory.push({
       ...entry,
       timestamp: new Date().toISOString(),
     });
   }
 
   getQAHistory() {
-    return this.qaHistory;
+    const nb = this._getActiveNotebook();
+    return nb.qaHistory;
   }
 
   clearHistory() {
-    this.conversationHistory = [];
-    this.qaHistory = [];
+    const nb = this._getActiveNotebook();
+    nb.conversationHistory = [];
+    nb.qaHistory = [];
   }
 
-  // Source management methods
   addSource(source) {
+    const nb = this._getActiveNotebook();
     const newSource = {
       id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
       ...source,
       addedAt: new Date().toISOString(),
     };
-    this.sources.push(newSource);
+    nb.sources.push(newSource);
     return newSource;
   }
 
   removeSource(id) {
-    const index = this.sources.findIndex(s => s.id === id);
+    const nb = this._getActiveNotebook();
+    const index = nb.sources.findIndex(s => s.id === id);
     if (index !== -1) {
-      this.sources.splice(index, 1);
+      nb.sources.splice(index, 1);
       return true;
     }
     return false;
   }
 
   getSources() {
-    return this.sources;
+    const nb = this._getActiveNotebook();
+    return nb.sources;
   }
 
   clearSources() {
-    this.sources = [];
+    const nb = this._getActiveNotebook();
+    nb.sources = [];
   }
   
   clearStudyMaterial() {
-    this.studyMaterial = null;
+    const nb = this._getActiveNotebook();
+    nb.studyMaterial = null;
+  }
+
+  isDefaultActive() {
+    const nb = this._getActiveNotebook();
+    return !!nb.isDefault;
   }
 
   getStats() {
+    const nb = this._getActiveNotebook();
     return {
-      materialLoaded: this.studyMaterial !== null,
-      historyLength: this.conversationHistory.length,
-      qaHistoryLength: this.qaHistory.length,
-      cacheSize: this.studyMaterial ? (this.studyMaterial.context ? this.studyMaterial.context.length : (this.studyMaterial.stats?.totalLength || 0)) : 0,
-      sourceCount: this.sources.length,
+      activeNotebookId: this.activeNotebookId,
+      activeNotebookName: nb.name,
+      isDefaultNotebook: !!nb.isDefault,
+      materialLoaded: nb.studyMaterial !== null,
+      historyLength: nb.conversationHistory.length,
+      qaHistoryLength: nb.qaHistory.length,
+      cacheSize: nb.studyMaterial ? (nb.studyMaterial.context ? nb.studyMaterial.context.length : (nb.studyMaterial.stats?.totalLength || 0)) : 0,
+      sourceCount: nb.sources.length,
+      notebookCount: this.notebooks.size,
     };
   }
 }
