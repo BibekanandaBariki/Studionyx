@@ -8,6 +8,11 @@ dotenv.config();
 
 const app = express();
 
+// Root route for Render health check
+app.get('/', (req, res) => {
+  res.status(200).send('Interactive Study Tool API is running 🚀');
+});
+
 // Basic security / CORS
 const allowedOrigin = process.env.FRONTEND_URL || 'http://localhost:5173';
 

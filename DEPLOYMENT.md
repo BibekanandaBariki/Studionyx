@@ -29,6 +29,7 @@
    - Open the Vercel URL
    - Click “Ingest study material” and wait for success
    - Test Q&A, Voice Dialogue, and Video Summary modes.
+   - **Mobile Check**: Open on a mobile device to verify the responsive layout and touch interactions.
 
 
 

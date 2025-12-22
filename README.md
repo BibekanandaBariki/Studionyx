@@ -4,11 +4,11 @@ AI-powered grounded study assistant for an economics chapter and two YouTube lec
 
 ### Features
 
-- **Grounded AI Q&A**: Gemini 1.5 Flash constrained to PDF + 2 videos with strict system prompt.
-- **Voice Dialogue Mode**: Web Speech API (speech recognition + synthesis) with confidence thresholding.
-- **Video-style Summaries**: Three-slide overview / concepts / exam tips with optional narration.
-- **Modern Emerald UI**: WebGL particle hero, glassmorphism, animated borders, micro-interactions.
-- **Responsive UX**: Mobile-friendly layout with touch targets, smooth transitions, and toasts.
+- **Grounded AI Q&A**: Gemini 1.5 Flash grounded in sourced material with accurate PDF page numbers and strict citation rules.
+- **Enhanced Voice Dialogue**: Friendly, human-like tutor with conversational mode, stop-speaking control, and natural turn-taking.
+- **Detailed Video-style Summaries**: Comprehensive 3-slide breakdown (Overview, Concepts, Exam Tips) with deep synthesis and scrollable content.
+- **Modern Emerald UI**: WebGL particle hero, glassmorphism, animated borders, and premium visual effects.
+- **Fully Responsive Design**: Optimized mobile layout with flexible grids, touch-friendly controls, and collapsible navigation.
 
 ### Tech Stack
 
@@ -40,9 +40,10 @@ Open `http://localhost:5173` and click “Ingest study material” first, then t
 ### API Overview
 
 - **POST `/api/ingest`**: Pulls PDF and YouTube transcripts, builds combined context, stores in memory.
-- **POST `/api/ask`**: Grounded Q&A with `{ question }` → `{ answer, isGrounded, sources, timestamp }`.
-- **POST `/api/dialogue`**: Voice dialogue turns with `{ message }` → `{ studentMessage, teacherResponse, conversationLength, timestamp }`.
-- **POST `/api/summary`**: Returns structured `summary` with `overview`, `concepts`, `examTips` and `slideCount`.
+- **POST `/api/ask`**: Grounded Q&A with accurate citations -> `{ answer, isGrounded, sources }`.
+- **POST `/api/dialogue`**: Conversational voice turns -> `{ studentMessage, teacherResponse, isGrounded }`.
+- **POST `/api/summary`**: Returns detailed structured summary -> `{ overview, concepts[], examTips[] }`.
+- **GET `/api/suggest-questions`**: Generates comprehensive suggested questions based on all material.
 - **GET `/api/health`**: Basic health check.
 - **GET `/api/test-gemini`**: Verifies Gemini connectivity.
 - **POST `/api/clear-history`**, **GET `/api/history`**, **GET `/api/stats`**: Conversation + storage introspection.

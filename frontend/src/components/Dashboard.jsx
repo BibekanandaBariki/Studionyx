@@ -264,7 +264,7 @@ const Dashboard = () => {
                   </p>
                 </div>
               </div>
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium text-emerald-300 shadow-sm">
+              <span className="hidden md:inline-block rounded-full border border-emerald-400/30 bg-emerald-500/10 px-3 py-1 text-[10px] font-medium text-emerald-300 shadow-sm">
                 NotebookLM Reimagined
               </span>
             </div>
@@ -350,7 +350,11 @@ const Dashboard = () => {
             </div>
           </div>
         </header>
-        <main className={`grid h-full overflow-hidden ${leftCollapsed && rightCollapsed ? 'grid-cols-[56px_1fr_56px]' : leftCollapsed ? 'grid-cols-[56px_1fr_280px]' : rightCollapsed ? 'grid-cols-[280px_1fr_56px]' : 'grid-cols-[280px_1fr_280px]'} gap-4 px-4 py-4`}>
+        <main className={`flex flex-col lg:grid h-full overflow-y-auto lg:overflow-hidden ${leftCollapsed && rightCollapsed ? 'lg:grid-cols-[56px_1fr_56px]' :
+          leftCollapsed ? 'lg:grid-cols-[56px_1fr_280px]' :
+            rightCollapsed ? 'lg:grid-cols-[280px_1fr_56px]' :
+              'lg:grid-cols-[280px_1fr_280px]'
+          } gap-4 px-4 py-4`}>
           <section className="h-full min-h-0">
             <AnimatedBorder className="h-full">
               <div className="flex h-full min-h-0 flex-col">
