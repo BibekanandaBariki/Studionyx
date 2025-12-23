@@ -6,6 +6,7 @@ import {
   dialogueTurn,
   generateSummary,
   testGeminiConnection,
+  generateSuggestedQuestions,
 } from '../services/geminiService.js';
 
 const router = express.Router();
@@ -99,6 +100,12 @@ router.post('/ingest', async (req, res, next) => {
     const material = await ingestStudyMaterials(sources.length > 0 ? sources : null);
 
     storage.setStudyMaterial(material);
+
+    // Trigger background question generation (Fire & Forget)
+    generateSuggestedQuestions({ force: true }).catch(err =>
+      console.error('[Async] Question generation failed:', err.message)
+    );
+
     res.json({
       success: true,
       message: 'Study material ingested successfully',
@@ -169,6 +176,12 @@ router.post('/upload', async (req, res, next) => {
     try {
       const material = await ingestStudyMaterials(storage.getSources());
       storage.setStudyMaterial(material);
+
+      // Trigger background question generation
+      generateSuggestedQuestions({ force: true }).catch(err =>
+        console.error('[Async] Question generation failed:', err.message)
+      );
+
       res.json({
         success: true,
         message: 'File uploaded and study material ingested successfully',
@@ -238,6 +251,12 @@ router.post('/sources/add', async (req, res, next) => {
     try {
       const material = await ingestStudyMaterials(storage.getSources());
       storage.setStudyMaterial(material);
+
+      // Trigger background question generation
+      generateSuggestedQuestions({ force: true }).catch(err =>
+        console.error('[Async] Question generation failed:', err.message)
+      );
+
       res.json({
         success: true,
         message: 'Source added and study material ingested successfully',
@@ -296,6 +315,12 @@ router.delete('/sources/:id', (req, res) => {
         ingestStudyMaterials(sources)
           .then((material) => {
             storage.setStudyMaterial(material);
+
+            // Trigger background question generation
+            generateSuggestedQuestions({ force: true }).catch(err =>
+              console.error('[Async] Question generation failed:', err.message)
+            );
+
             res.json({
               success: true,
               message: 'Source removed and study material updated',
@@ -314,6 +339,9 @@ router.delete('/sources/:id', (req, res) => {
           ingestStudyMaterials(null)
             .then((material) => {
               storage.setStudyMaterial(material);
+              // Trigger background regen
+              generateSuggestedQuestions({ force: true }).catch(err => console.error(err));
+
               res.json({
                 success: true,
                 message: 'Source removed. Default notebook loaded from environment',
@@ -419,17 +447,18 @@ router.post('/summary', async (req, res, next) => {
 router.post('/suggest-questions', async (req, res, next) => {
   console.log('[API] /suggest-questions called');
   try {
-    const { generateSuggestedQuestions } = await import('../services/geminiService.js');
-    console.log('[API] Calling generateSuggestedQuestions...');
+    // 1. If not generated yet (and not currently generating), this might return existing or trigger regen if cache empty.
+    // Since we now cache, this call is fast if cached.
     const result = await generateSuggestedQuestions();
-    console.log('[API] generateSuggestedQuestions result:', result);
 
-    const response = {
+    // Note: If generation is still "in progress" (from background job), 
+    // there isn't a lock mechanism here, so it might run twice. 
+    // But safely: if cache is empty, it runs. If cache has items, it returns.
+
+    res.json({
       success: true,
       ...result,
-    };
-    console.log('[API] Sending response:', response);
-    res.json(response);
+    });
   } catch (err) {
     console.error('[API] Error in /suggest-questions:', err.message);
 

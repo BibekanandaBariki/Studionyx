@@ -1,9 +1,56 @@
 import { useState, useEffect } from 'react';
-import { ClipboardCopy, CornerDownLeft, RefreshCw, Trash2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { ClipboardCopy, CornerDownLeft, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import AnimatedBorder from './AnimatedBorder.jsx';
 import LoadingState from './LoadingState.jsx';
 import { askQuestion } from '../utils/api.js';
+
+const CollapsibleQuestions = ({ title, questions, onQuestionClick }) => {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <div className="rounded-xl border border-slate-700/50 bg-slate-800/20 overflow-hidden transition-all duration-300">
+      <div
+        className="flex items-center justify-between px-3 py-2 cursor-pointer hover:bg-slate-700/30 transition-colors"
+        onClick={() => setCollapsed(!collapsed)}
+      >
+        <p className="text-xs font-semibold text-emerald-300/90 uppercase tracking-wider flex items-center gap-2">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
+          {title}
+        </p>
+        <button
+          className="text-slate-400 hover:text-emerald-300 transition-colors"
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {collapsed ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </button>
+      </div>
+
+      {!collapsed && (
+        <div className="px-3 pb-3 pt-1 animate-in slide-in-from-top-2 duration-200">
+          <div className="flex flex-col gap-2">
+            {questions.map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => {
+                  onQuestionClick(q);
+                  setCollapsed(true); // Auto-collapse on click
+                }}
+                className="group w-full text-left rounded-lg border border-slate-700/50 bg-slate-800/40 px-3 py-2 text-xs text-slate-300 hover:bg-emerald-500/10 hover:border-emerald-500/30 hover:text-emerald-300 transition-all flex items-start gap-2"
+              >
+                <span className="mt-0.5 opacity-50 group-hover:opacity-100 transition-opacity">→</span>
+                <span>{q}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const QAChat = ({ onError, suggestedQuestions = [], loadingSuggestions = false, onSuggestionClick, onRequestMoreSuggestions }) => {
   const [question, setQuestion] = useState('');
@@ -115,7 +162,7 @@ const QAChat = ({ onError, suggestedQuestions = [], loadingSuggestions = false, 
           <div className="flex h-full min-h-0 flex-col">
             <div className="flex-1 overflow-y-auto space-y-4">
               {messages.length === 0 && !loading && (
-                <div className="empty-state flex h-full items-center justify-center opacity-60 text-center">
+                <div className="empty-state flex flex-col items-center justify-center py-12 opacity-60 text-center">
                   <p className="text-sm text-slate-300/80">
                     Add study material to begin&nbsp;<span className="font-medium text-emerald-300">grounded learning</span>.
                   </p>
@@ -131,7 +178,22 @@ const QAChat = ({ onError, suggestedQuestions = [], loadingSuggestions = false, 
                       : 'mr-auto bg-slate-800/80 text-slate-50'
                       }`}
                   >
-                    {m.content}
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h2: ({ node, ...props }) => <h2 className="text-emerald-300 font-bold text-base mt-3 mb-2 first:mt-0" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-emerald-200 font-semibold text-sm mt-2 mb-1" {...props} />,
+                        p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2 space-y-1" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2 space-y-1" {...props} />,
+                        li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                        blockquote: ({ node, ...props }) => <blockquote className="border-l-2 border-emerald-500/50 pl-3 italic my-2 text-slate-300" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-100" {...props} />,
+                        a: ({ node, ...props }) => <a className="text-emerald-400 hover:underline" target="_blank" rel="noreferrer" {...props} />,
+                      }}
+                    >
+                      {m.content}
+                    </ReactMarkdown>
                   </div>
                   {m.role === 'assistant' && m.meta && (
                     <div className="ml-1 flex items-center gap-2 text-[10px] text-slate-300/70">
@@ -153,36 +215,24 @@ const QAChat = ({ onError, suggestedQuestions = [], loadingSuggestions = false, 
                 </div>
               ))}
               {loading && <LoadingState lines={4} />}
-            </div>
-            <div className="pt-4 space-y-3">
-              {loadingSuggestions && (
-                <div className="flex items-center gap-2 text-xs text-emerald-400">
-                  <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
-                  <span>Loading suggested questions...</span>
-                </div>
-              )}
-              {!loadingSuggestions && activeSuggestions.length > 0 && !loading && (
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold text-emerald-300/90 uppercase tracking-wider flex items-center gap-2">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-                    {messages.length === 0 ? 'Suggested Questions' : 'Related Questions'}
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {activeSuggestions.map((q, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => handleSuggestionClick(q)}
-                        className="group rounded-xl border border-slate-700/70 bg-gradient-to-br from-slate-800/60 to-slate-800/40 px-3 py-2.5 text-xs text-slate-200 shadow-sm transition-all hover:border-emerald-500/60 hover:from-emerald-500/15 hover:to-emerald-600/10 hover:text-emerald-300 hover:shadow-emerald-500/20 hover:-translate-y-0.5 text-left"
-                      >
-                        <span className="opacity-0 group-hover:opacity-100 transition-opacity mr-1">→</span>
-                        {q}
-                      </button>
-                    ))}
+
+              <div className="pt-2">
+                {loadingSuggestions && (
+                  <div className="flex items-center gap-2 text-xs text-emerald-400 px-1">
+                    <div className="h-3 w-3 animate-spin rounded-full border-2 border-emerald-400 border-t-transparent" />
+                    <span>Loading suggested questions...</span>
                   </div>
-                </div>
-              )}
+                )}
+                {!loadingSuggestions && activeSuggestions.length > 0 && !loading && (
+                  <CollapsibleQuestions
+                    title={messages.length === 0 ? 'Suggested Questions' : 'Related Questions'}
+                    questions={activeSuggestions}
+                    onQuestionClick={handleSuggestionClick}
+                  />
+                )}
+              </div>
             </div>
+
           </div>
         </GlassCard>
 

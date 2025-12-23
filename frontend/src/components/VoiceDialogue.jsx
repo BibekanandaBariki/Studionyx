@@ -1,4 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Mic, MicOff, Volume2, AlertTriangle, RefreshCw } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import AnimatedBorder from './AnimatedBorder.jsx';
@@ -275,8 +277,21 @@ const VoiceDialogue = ({ onError }) => {
                   </div>
                 </div>
                 <div className="flex justify-start">
-                  <div className="max-w-[85%] rounded-2xl bg-slate-800/80 px-3 py-2 text-sm text-slate-50 group relative">
-                    {turn.teacherResponse}
+                  <div className="max-w-[85%] rounded-2xl bg-slate-800/80 px-4 py-3 text-sm text-slate-50 group relative leading-relaxed">
+                    <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
+                      components={{
+                        h2: ({ node, ...props }) => <h2 className="text-emerald-300 font-bold text-sm mt-2 mb-1 first:mt-0" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-emerald-200 font-semibold text-xs mt-1 mb-0.5" {...props} />,
+                        p: ({ node, ...props }) => <p className="mb-1 last:mb-0" {...props} />,
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-1 space-y-0.5" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-1 space-y-0.5" {...props} />,
+                        li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-semibold text-emerald-100" {...props} />,
+                      }}
+                    >
+                      {turn.teacherResponse}
+                    </ReactMarkdown>
                     <button
                       type="button"
                       onClick={() => speak(turn.teacherResponse)}

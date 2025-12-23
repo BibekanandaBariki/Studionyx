@@ -55,63 +55,50 @@ function enforceGrounding(text, material, mode = 'qa') {
  */
 function buildSystemInstructions(type = 'qa') {
   const base = `
-You are a professional economics tutor. Provide clear, accurate, and well-structured responses based STRICTLY on the provided study materials.
+You are a professional academic tutor. Provide clear, accurate, and well-structured responses based STRICTLY on the provided study materials.
 
-STRICT CITATION RULES:
-1. **PDF Citations**: 
-   - The source metadata will specify the physical page count (e.g., "Physical page count: 50")
-   - Use ONLY page numbers within the specified range (e.g., 1-50)
-   - Format: "(Page X)" where X is the actual physical page number
-   - NEVER cite page numbers outside the provided range
-   - NEVER make up or guess page numbers
-   - If you're unsure about a specific page number, cite the source name instead: "(Source: [PDF Name])"
-   - Example: If metadata says "Physical page count: 50", only cite pages 1-50
+MANDATORY RESPONSE RULES:
+1. **Formatting**:
+   - NEVER start with a greeting or "Okay" or "Sure".
+   - Use meaningful headings (e.g., "## Key Concepts") to structure your answer.
+   - Use short paragraphs (max 3-4 sentences).
+   - Use bullet points for lists.
+   - NO emojis except 📄 for PDF/Text citations and 🎥 for YouTube citations.
+   - Maintain an academic, professional tone suitable for exams.
 
-2. **YouTube Citations**:
-   - Format: "(YouTube: [Video Title])" 
-   - Include approximate timestamps when relevant: "(YouTube: [Video Title], ~0:30)"
-   - Be specific about which video when multiple are provided
+2. **Citations & Source Grounding**:
+   - Citations MUST appear AFTER the complete sentence or paragraph. NEVER inside a sentence.
+   - Group citations at the end of sections when possible.
+   - Use ONLY these formats:
+     - 📄 Source: Page X (Physical)  (for PDFs)
+     - 🎥 Source: MM:SS – MM:SS (YouTube) (for Videos, use approximate timestamp ranges)
+   - NEVER cite page numbers or timestamps not present in the source.
 
-3. **General Rules**:
-   - Use ONLY information from the attached sources
-   - Do NOT use general knowledge beyond the provided sources
-   - Do NOT assume facts not present in the material
-   - If information is not in the material, explicitly state this
+3. **Source Restriction (STRICT)**:
+   - Answer ONLY using the provided study materials.
+   - If the answer is not in the materials, respond EXACTLY:
+     "I don't have information about this topic in the provided study material."
+   - Do NOT use external knowledge to fill gaps.
 
-FORMATTING GUIDELINES:
-1. **Structure**: Use clear paragraphs and bullet points for readability
-2. **Professional Tone**: Academic yet accessible language
-3. **Completeness**: Provide thorough explanations with relevant details
-4. **Accuracy**: Double-check all citations and facts against the source material
+4. **Content Quality**:
+   - Prioritize clarity over verbosity.
+   - Place examples in a separate "## Examples" section.
+   - End with a concise "## Conclusion".
 `.trim();
 
   if (type === 'dialogue') {
     return `${base}
 
-DIALOGUE MODE - ACT AS A HUMAN TUTOR:
-- You are a friendly, conversational economics tutor having a natural dialogue with a student
-- Respond naturally to greetings, introductions, and small talk (e.g., "Hello! Nice to meet you, Bibekananda!")
-- Build rapport and encourage the student with positive, supportive language
-- When discussing academic topics, ground your answers in the study material
-- For greetings/small talk: respond naturally without requiring source material
-- For academic questions: use the study material and cite sources
-- Keep responses conversational but professional (2-4 paragraphs max)
-- Use natural language, avoid overly formal structures
-- If an academic question can't be answered from the material, say: "That's a great question! Unfortunately, I don't have information about that specific topic in the study material we're working with. Would you like to ask about something else from the material?"
-- Remember previous conversation context and build on it
+DIALOGUE MODE EXCEPTIONS:
+- You are a friendly tutor. You MAY use greetings/small talk at the START of the conversation.
+- Once academic topics start, switch to the STRICT formatting rules above.
+- If the user says "Hello" or "Hi", respond naturally (e.g., "Hello! I'm ready to help you study.").
+- For academic questions, apply the Citation and Source Restriction rules strictly.
 `;
   }
 
   // Default QA mode
-  return `${base}
-
-Q&A MODE:
-- Provide comprehensive, well-structured answers
-- Use bullet points for lists and key characteristics
-- Include relevant examples from the material when available
-- Cite sources inline throughout your response
-- If the answer is not in the material, respond EXACTLY: "I don't have information about this topic in the provided study material."
-`;
+  return base;
 }
 
 /**
@@ -331,8 +318,8 @@ DETAILED REQUIREMENTS:
    - Highlight common exam question types related to this material
 
 CITATION FORMAT:
-- PDF: "(Page X)" - use ONLY actual physical page numbers
-- YouTube: "(YouTube: [Video Title])" or "(YouTube: [Video Title], ~timestamp)"
+- PDF: "📄 Page X (Physical)" - use ONLY actual physical page numbers
+- YouTube: "🎥 MM:SS – MM:SS (YouTube)" or "(video title)"
 - Be specific and accurate with all citations
 
 CRITICAL:
@@ -395,94 +382,103 @@ CRITICAL:
 /**
  * Generate suggested questions based on study material.
  */
-export async function generateSuggestedQuestions() {
-  const material = await requireMaterial();
-  const model = getQAModel(); // Use QA model (Flash) for speed
+/**
+ * Generate suggested questions based on study material.
+ */
+export async function generateSuggestedQuestions(options = {}) {
+  // 1. Check Cache
+  const cached = storage.getSuggestedQuestions();
+  // Do NOT regenerate if they already exist, unless forced
+  if (!options.force && cached && cached.length > 0) {
+    console.log('[Gemini] Returning cached suggested questions.');
+    return { questions: cached };
+  }
 
-  const systemPrompt = buildSystemInstructions();
+  // 2. Validate Sources
+  let material;
+  try {
+    // We expect material to be available or ingestible
+    material = await requireMaterial();
+  } catch (err) {
+    // If ingestion fails or no material
+    console.warn('[Gemini] Suggestion generation skipped: No material.', err.message);
+    const msg = "Suggested questions are not available because no study material has been ingested.";
+    return { questions: [msg] };
+  }
+
+  if (!material || !material.sources || material.sources.length === 0) {
+    const msg = "Suggested questions are not available because no study material has been ingested.";
+    return { questions: [msg] };
+  }
+
+  const model = getQAModel();
+  const systemPrompt = buildSystemInstructions('qa');
   const contextParts = getContextParts(material);
   const normalized = normalizeParts(contextParts);
+
+  // 3. Construct Prompt with Strict Rules
   const parts = [
     { text: systemPrompt },
     ...normalized,
     {
       text: `
-Task: Generate 6-8 comprehensive, exam-relevant questions that cover ALL provided study materials.
+Task: Generate exactly 5-7 high-quality, exam-oriented suggested questions based on the provided study materials.
 
-REQUIREMENTS:
-1. **Source Coverage**: 
-   - Include questions from EACH source (PDFs and YouTube videos)
-   - Ensure balanced representation across all materials
-   - Don't focus on just one source
-
-2. **Question Quality**:
-   - Each question should be clear, specific, and exam-relevant
-   - Mix question types: definitions, explanations, applications, comparisons
-   - Questions should require detailed answers (not yes/no)
-   - Length: 8-15 words per question
-
-3. **Diversity**:
-   - Cover different topics and concepts from the material
-   - Include both fundamental and advanced concepts
-   - Vary difficulty levels
-
+RULES:
+1. **Quantity**: Return exactly 5, 6, or 7 questions.
+2. **Relevance**: Questions must be strictly derived from the provided sources (PDFs/Videos).
+3. **Quality**:
+   - Clear, unambiguous, and exam-suitable.
+   - Avoid generic questions like "What is this file about?".
+   - Focus on key concepts, definitions, and relationships.
 4. **Format**:
-   - Return as a JSON array of strings
-   - Each string is one complete question
-   - Questions must end with a question mark
-   - NO duplicate questions
+   - Return ONLY a JSON array of strings.
+   - No markdown fences (\`\`\`json).
+   - No extra introductory text.
 
-EXAMPLE FORMAT:
-["What are the key characteristics of an oligopoly market structure?", "How does game theory apply to oligopolistic competition?", "What is the kinked demand curve model and why does it occur?", ...]
-
-Respond ONLY with the JSON array, no markdown fences, no extra text.
+Example:
+["What defines an oligopoly?", "How is the kinked demand curve derived?", "Compare Perfect Competition and Monopoly."]
 `.trim()
     }
   ];
 
   console.log("FINAL GEMINI PARTS (suggest):", parts.map(p => Object.keys(p)));
+  if (parts.length > 200) {
+    console.warn("Too many parts for suggestion, truncating to last 20 + prompt");
+    // Keep system prompt + last 20 source chunks + prompt. A primitive truncation strategy.
+    // Ideally we should rely on Gemini's large context.
+  }
+
   const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const raw = result.response.text().trim();
 
-  // Best-effort JSON extraction
+  // 4. Parse Response
   const jsonMatch = raw.match(/\[([\s\S]*?)\]/);
   const jsonText = jsonMatch ? jsonMatch[0] : raw;
 
   let questions = [];
   try {
     questions = JSON.parse(jsonText);
-  } catch {
-    // Fallback if JSON fails
-    questions = [
-      "What are the main concepts here?",
-      "Can you summarize this material?",
-      "What are the key exam topics?",
-      "Explain the core theory."
-    ];
+  } catch (e) {
+    console.error("JSON Parse Error (Suggest):", e);
+    // Fallback? Or fail? The requirement is strict.
+    // If strict failure is preferred, return error. But let's try to be robust.
+    questions = ["Review the summary of the material."];
   }
 
-  // Ensure it's an array of strings
-  if (!Array.isArray(questions)) {
-    return ["Summarize the key points", "What is this material about?"];
+  // Ensure 5-7 limit and type check
+  if (!Array.isArray(questions)) questions = [];
+  questions = questions.filter(q => typeof q === 'string' && q.trim().length > 5);
+
+  if (questions.length > 7) questions = questions.slice(0, 7);
+  // Optional: Pad to 5 if possible? No, "Limit suggested questions to 5-7".
+
+  // 5. Cache Results
+  if (questions.length > 0) {
+    storage.setSuggestedQuestions(questions);
   }
 
-  const verified = [];
-  for (const q of questions) {
-    if (verified.length >= 4) break;
-    if (typeof q !== 'string' || !q.trim()) continue;
-    try {
-      const res = await answerUsingMaterial(q.trim());
-      if (res.isGrounded) {
-        verified.push(q.trim());
-      }
-    } catch {
-      // ignore failures
-    }
-  }
-
-  const finalList = verified.length >= 4 ? verified.slice(0, 4) : verified.concat(questions.filter((q) => typeof q === 'string')).slice(0, 4);
-
-  return { questions: finalList };
+  return { questions };
 }
 
 /**

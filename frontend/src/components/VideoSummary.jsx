@@ -130,8 +130,8 @@ const VideoSummary = ({ onError }) => {
       clearTimeout(advanceTimeoutRef.current);
       sessionRef.current += 1;
       setAutoNarrating(true);
-      const target = current >= slides.length - 1 ? 0 : current;
-      setCurrent(target);
+      // Start from current slide
+      const target = current;
       playSlide(target);
     }
   };

@@ -19,6 +19,7 @@ class Storage {
       studyMaterial: null,
       conversationHistory: [],
       qaHistory: [],
+      suggestedQuestions: [],
     };
     this.notebooks.set(id, notebook);
     this.activeNotebookId = id;
@@ -54,6 +55,7 @@ class Storage {
       studyMaterial: null,
       conversationHistory: [],
       qaHistory: [],
+      suggestedQuestions: [],
     };
     this.notebooks.set(id, notebook);
     this.activeNotebookId = id;
@@ -158,15 +160,26 @@ class Storage {
     const nb = this._getActiveNotebook();
     nb.sources = [];
   }
-  
+
   clearStudyMaterial() {
     const nb = this._getActiveNotebook();
     nb.studyMaterial = null;
+    nb.suggestedQuestions = [];
   }
 
   isDefaultActive() {
     const nb = this._getActiveNotebook();
     return !!nb.isDefault;
+  }
+
+  getSuggestedQuestions() {
+    const nb = this._getActiveNotebook();
+    return nb.suggestedQuestions || [];
+  }
+
+  setSuggestedQuestions(questions) {
+    const nb = this._getActiveNotebook();
+    nb.suggestedQuestions = questions;
   }
 
   getStats() {
