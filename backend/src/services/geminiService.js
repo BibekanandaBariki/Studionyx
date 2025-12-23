@@ -1,6 +1,6 @@
 import storage from './storage.js';
 import { ingestStudyMaterials } from './ingestion.js';
-import { getQAModel, getDialogueModel, getSummaryModel } from '../config/gemini.js';
+import { getQAModel, getDialogueModel, getSummaryModel, getSuggestModel } from '../config/gemini.js';
 
 const REFUSAL = 'I don\'t have information about this topic in the provided study material.';
 
@@ -411,7 +411,7 @@ export async function generateSuggestedQuestions(options = {}) {
     return { questions: [msg] };
   }
 
-  const model = getQAModel();
+  const model = getSuggestModel();
   const systemPrompt = buildSystemInstructions('qa');
   const contextParts = getContextParts(material);
   const normalized = normalizeParts(contextParts);
@@ -433,8 +433,6 @@ RULES:
    - Focus on key concepts, definitions, and relationships.
 4. **Format**:
    - Return ONLY a JSON array of strings.
-   - No markdown fences (\`\`\`json).
-   - No extra introductory text.
 
 Example:
 ["What defines an oligopoly?", "How is the kinked demand curve derived?", "Compare Perfect Competition and Monopoly."]
@@ -452,17 +450,13 @@ Example:
   const result = await model.generateContent({ contents: [{ role: 'user', parts }] });
   const raw = result.response.text().trim();
 
-  // 4. Parse Response
-  const jsonMatch = raw.match(/\[([\s\S]*?)\]/);
-  const jsonText = jsonMatch ? jsonMatch[0] : raw;
-
+  // 4. Parse Response - Model is in JSON mode, so it should be valid JSON
   let questions = [];
   try {
-    questions = JSON.parse(jsonText);
+    questions = JSON.parse(raw);
   } catch (e) {
-    console.error("JSON Parse Error (Suggest):", e);
-    // Fallback? Or fail? The requirement is strict.
-    // If strict failure is preferred, return error. But let's try to be robust.
+    console.error("JSON Parse Error (Suggest):", e, "Raw output:", raw);
+    // Even in JSON mode, sometimes models output nothing or fail.
     questions = ["Review the summary of the material."];
   }
 
@@ -471,7 +465,6 @@ Example:
   questions = questions.filter(q => typeof q === 'string' && q.trim().length > 5);
 
   if (questions.length > 7) questions = questions.slice(0, 7);
-  // Optional: Pad to 5 if possible? No, "Limit suggested questions to 5-7".
 
   // 5. Cache Results
   if (questions.length > 0) {

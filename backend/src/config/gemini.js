@@ -54,6 +54,21 @@ export const getSummaryModel = () => {
       topP: 0.8,
       topK: 20,
       maxOutputTokens: 4096,
+      responseMimeType: 'application/json',
+    },
+  });
+};
+
+// Suggestion Mode: JSON output (temperature 0.2)
+export const getSuggestModel = () => {
+  return genAI.getGenerativeModel({
+    model: MODEL_NAME,
+    generationConfig: {
+      temperature: 0.2,
+      topP: 0.8,
+      topK: 20,
+      maxOutputTokens: 2048,
+      responseMimeType: 'application/json',
     },
   });
 };
