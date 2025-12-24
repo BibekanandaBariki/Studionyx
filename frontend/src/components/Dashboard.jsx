@@ -28,6 +28,7 @@ const Dashboard = () => {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const notebookDropdownRef = useRef(null);
   const [rightCollapsed, setRightCollapsed] = useState(false);
+  const [mobileTab, setMobileTab] = useState('chat'); // 'sources', 'chat', 'studio'
   const suggestionsRequestIdRef = useRef(0); // Track request IDs to prevent race conditions
 
   const handleError = (message) => {
@@ -234,6 +235,40 @@ const Dashboard = () => {
     return <VideoSummary onError={handleError} />;
   };
 
+  const MobileTabs = () => (
+    <div className="grid grid-cols-3 border-t border-white/5 bg-slate-900/50 backdrop-blur-xl lg:hidden">
+      <button
+        type="button"
+        onMouseDown={(e) => { e.preventDefault(); setMobileTab('sources'); }}
+        className={`flex flex-col items-center justify-center py-3 text-sm font-medium transition-colors ${mobileTab === 'sources' ? 'border-b-2 border-emerald-400 text-emerald-300' : 'text-slate-400 border-b-2 border-transparent'}`}
+      >
+        Sources
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setMobileTab('chat');
+          if (mode !== 'qa' && mode !== 'voice') setMode('qa');
+        }}
+        className={`flex flex-col items-center justify-center py-3 text-sm font-medium transition-colors ${mobileTab === 'chat' ? 'border-b-2 border-emerald-400 text-emerald-300' : 'text-slate-400 border-b-2 border-transparent'}`}
+      >
+        Chat
+      </button>
+      <button
+        type="button"
+        onMouseDown={(e) => {
+          e.preventDefault();
+          setMobileTab('studio');
+          setMode('summary');
+        }}
+        className={`flex flex-col items-center justify-center py-3 text-sm font-medium transition-colors ${mobileTab === 'studio' ? 'border-b-2 border-emerald-400 text-emerald-300' : 'text-slate-400 border-b-2 border-transparent'}`}
+      >
+        Studio
+      </button>
+    </div>
+  );
+
   if (showHero) {
     return (
       <>
@@ -259,7 +294,7 @@ const Dashboard = () => {
                 </div>
                 <div>
                   <h1 className="text-lg font-bold gradient-text">Interactive Study Tool</h1>
-                  <p className="text-[11px] text-slate-400">
+                  <p className="hidden lg:block text-[11px] text-slate-400">
                     Grounded economics tutoring • Q&amp;A • Voice • Video Summaries
                   </p>
                 </div>
@@ -268,11 +303,11 @@ const Dashboard = () => {
                 NotebookLM Reimagined
               </span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 lg:gap-3">
               <button
                 type="button"
                 onClick={handleCreateNotebook}
-                className="group inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5"
+                className="hidden lg:inline-flex group h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20 hover:-translate-y-0.5"
               >
                 <Plus size={16} className="group-hover:rotate-90 transition-transform" />
                 New Notebook
@@ -281,14 +316,24 @@ const Dashboard = () => {
                 <button
                   type="button"
                   onClick={() => setNotebookMenuOpen((v) => !v)}
-                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20"
+                  className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-800/50 px-3 lg:px-4 text-xs font-medium text-slate-200 shadow-md transition-all hover:border-emerald-400/70 hover:bg-emerald-500/10 hover:shadow-emerald-500/20"
                 >
                   <LayoutGrid size={16} />
-                  Notebooks
+                  <span className="hidden lg:inline">Notebooks</span>
                   <ChevronDown size={14} className={`transition-transform ${notebookMenuOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {notebookMenuOpen && (
-                  <div className="absolute right-0 z-[60] mt-2 w-72 rounded-xl border border-slate-700/50 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+                  <div className="absolute right-0 top-full z-[60] mt-2 w-72 max-w-[90vw] rounded-xl border border-slate-700/50 bg-slate-900/95 shadow-2xl backdrop-blur-xl">
+                    <div className="p-2 border-b border-white/5 lg:hidden">
+                      <button
+                        type="button"
+                        onClick={() => { handleCreateNotebook(); setNotebookMenuOpen(false); }}
+                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/20"
+                      >
+                        <Plus size={14} />
+                        Create New Notebook
+                      </button>
+                    </div>
                     <div className="max-h-80 overflow-y-auto p-2">
                       {notebooks.map(nb => (
                         <div key={nb.id} className={`group flex items-center justify-between gap-2 rounded-lg px-3 py-2.5 transition-all ${activeNotebookId === nb.id ? 'bg-emerald-500/15 border border-emerald-500/30' : 'hover:bg-slate-800/50'}`}>
@@ -306,16 +351,16 @@ const Dashboard = () => {
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => handleRenameNotebook(nb.id)}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-coolwhite"
+                                  onClick={(e) => { e.stopPropagation(); handleRenameNotebook(nb.id); }}
+                                  className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-coolwhite lg:p-1.5"
                                   title="Rename"
                                 >
                                   <Edit2 size={14} />
                                 </button>
                                 <button
                                   type="button"
-                                  onClick={() => handleDeleteNotebook(nb.id)}
-                                  className="rounded-lg p-1.5 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-300"
+                                  onClick={(e) => { e.stopPropagation(); handleDeleteNotebook(nb.id); }}
+                                  className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-red-500/20 hover:text-red-300 lg:p-1.5"
                                   title="Delete"
                                 >
                                   <Trash2 size={14} />
@@ -343,19 +388,23 @@ const Dashboard = () => {
                 ) : (
                   <>
                     <FileText size={16} />
-                    Ingest Material
+                    <span className="hidden lg:inline">Ingest Material</span>
+                    <span className="lg:hidden">Ingest</span>
                   </>
                 )}
               </button>
             </div>
           </div>
+          <MobileTabs />
         </header>
-        <main className={`flex flex-col lg:grid h-full overflow-y-auto lg:overflow-hidden ${leftCollapsed && rightCollapsed ? 'lg:grid-cols-[56px_1fr_56px]' :
+
+        <main className={`flex-1 min-h-0 relative ${leftCollapsed && rightCollapsed ? 'lg:grid-cols-[56px_1fr_56px]' :
           leftCollapsed ? 'lg:grid-cols-[56px_1fr_280px]' :
             rightCollapsed ? 'lg:grid-cols-[280px_1fr_56px]' :
               'lg:grid-cols-[280px_1fr_280px]'
-          } gap-4 px-4 py-4`}>
-          <section className="h-full min-h-0">
+          } lg:grid gap-0 lg:gap-4 p-0 lg:p-4 overflow-hidden`}>
+          {/* Sources Panel - Visible if tab is 'sources' OR on Desktop */}
+          <section className={`h-full min-h-0 ${mobileTab === 'sources' ? 'block' : 'hidden'} lg:block`}>
             <AnimatedBorder className="h-full">
               <div className="flex h-full min-h-0 flex-col">
                 <div className="flex items-center justify-between px-3 py-2">
@@ -395,10 +444,33 @@ const Dashboard = () => {
               </div>
             </AnimatedBorder>
           </section>
-          <section className="h-full min-h-0">
-            {renderMode()}
+          {/* Main Content Area - Visible if tab is 'chat' or 'studio' OR on Desktop */}
+          <section className={`h-full min-h-0 ${(mobileTab === 'chat' || mobileTab === 'studio') ? 'block' : 'hidden'} lg:block flex flex-col`}>
+            {/* Mobile Studio Mode Switcher */}
+            {mobileTab === 'studio' && (
+              <div className="flex items-center justify-center gap-2 border-b border-white/5 bg-slate-900/50 p-2 lg:hidden">
+                <button
+                  onClick={() => setMode('summary')}
+                  className={`flex items-center justify-center gap-2 flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'summary' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:bg-white/5 border border-transparent'}`}
+                >
+                  <FileText size={14} />
+                  Slides
+                </button>
+                <button
+                  onClick={() => setMode('voice')}
+                  className={`flex items-center justify-center gap-2 flex-1 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${mode === 'voice' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:bg-white/5 border border-transparent'}`}
+                >
+                  <Waves size={14} />
+                  Voice
+                </button>
+              </div>
+            )}
+            <div className="flex-1 min-h-0 h-full">
+              {renderMode()}
+            </div>
           </section>
-          <section className="h-full min-h-0">
+          {/* Modes Panel - HIDDEN on mobile, visible ONLY on Desktop */}
+          <section className="hidden lg:block h-full min-h-0">
             <AnimatedBorder className="h-full">
               <div className="flex h-full min-h-0 flex-col">
                 <div className="flex items-center justify-between px-3 py-2">

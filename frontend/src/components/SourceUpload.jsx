@@ -128,7 +128,7 @@ const SourceUpload = ({ onClose, onSourcesUpdated, showToast }) => {
     ];
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
             <div className="w-full max-w-2xl rounded-2xl border border-slate-700/50 bg-slate-900 shadow-2xl">
                 {/* Header */}
                 <div className="flex items-center justify-between border-b border-slate-700/50 p-4">
@@ -153,8 +153,8 @@ const SourceUpload = ({ onClose, onSourcesUpdated, showToast }) => {
                                     type="button"
                                     onClick={() => setActiveTab(tab.id)}
                                     className={`flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${activeTab === tab.id
-                                            ? 'border-emerald-400 text-emerald-300'
-                                            : 'border-transparent text-slate-400 hover:text-slate-300'
+                                        ? 'border-emerald-400 text-emerald-300'
+                                        : 'border-transparent text-slate-400 hover:text-slate-300'
                                         }`}
                                 >
                                     <Icon className="h-4 w-4" />
@@ -166,7 +166,7 @@ const SourceUpload = ({ onClose, onSourcesUpdated, showToast }) => {
                 </div>
 
                 {/* Content */}
-                <div className="p-6">
+                <div className="p-4 md:p-6">
                     {activeTab === 'file' && (
                         <div className="space-y-4">
                             <FileDropZone

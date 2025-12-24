@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Mic, MicOff, Volume2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Mic, MicOff, Volume2, AlertTriangle, RefreshCw, Send } from 'lucide-react';
 import GlassCard from './GlassCard.jsx';
 import AnimatedBorder from './AnimatedBorder.jsx';
 import WaveformVisualizer from './WaveformVisualizer.jsx';
@@ -145,11 +145,11 @@ const VoiceDialogue = ({ onError }) => {
 
   return (
     <AnimatedBorder className="h-full">
-      <div className="flex h-full flex-col p-4 md:p-6">
+      <div className="flex h-full flex-col p-2 md:p-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-coolwhite">Voice Dialogue</h2>
-            <p className="text-xs text-slate-300/70">
+            <h2 className="text-base md:text-lg font-semibold text-coolwhite">Voice Dialogue</h2>
+            <p className="text-[10px] md:text-xs text-slate-300/70">
               Hold a conversation with an AI tutor grounded in your exact materials.
             </p>
           </div>
@@ -195,16 +195,16 @@ const VoiceDialogue = ({ onError }) => {
           </div>
         </div>
 
-        <GlassCard className="mb-4">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="flex flex-1 flex-col gap-2">
-              <div className="flex items-center justify-between text-[11px] text-slate-300/80">
+        <GlassCard className="flex-shrink-0 mb-1 md:mb-4 !p-1.5 md:!p-6 overflow-hidden shadow-inner">
+          {/* Main Layout: Single Row on Mobile, Side-by-Side on Desktop */}
+          <div className="flex flex-row items-center gap-1.5 md:items-start md:gap-4">
+
+            {/* Input Area */}
+            <div className="flex flex-1 flex-col gap-1.5 md:gap-2">
+              <div className="hidden md:flex items-center justify-between text-[11px] text-slate-300/80">
                 <span>Transcript preview</span>
                 {confidence != null && (
-                  <span
-                    className={`rounded-full px-2 py-0.5 ${confidence > 0.7 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/15 text-amber-300'
-                      }`}
-                  >
+                  <span className={`rounded-full px-2 py-0.5 ${confidence > 0.7 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>
                     Confidence: {(confidence * 100).toFixed(0)}%
                   </span>
                 )}
@@ -212,60 +212,61 @@ const VoiceDialogue = ({ onError }) => {
               <textarea
                 value={pendingMessage || previewTranscript}
                 onChange={(e) => setPendingMessage(e.target.value)}
-                placeholder={
-                  micSupported
-                    ? 'Speak or type your question, then send to the tutor…'
-                    : 'Type your question, then send to the tutor…'
-                }
-                rows={3}
-                className="w-full resize-none rounded-xl border border-slate-600/60 bg-slate-900/70 px-3 py-2 text-sm text-coolwhite outline-none ring-emerald-500/40 focus:border-emerald-500/70 focus:ring"
+                placeholder={micSupported ? "Speak or type..." : "Type question..."}
+                rows={1}
+                className="w-full resize-none rounded-xl border border-slate-600/60 bg-slate-900/70 px-3 py-1.5 md:py-3 text-sm text-coolwhite shadow-inner outline-none ring-emerald-500/40 focus:border-emerald-500/70 focus:ring min-h-[36px] md:min-h-[80px] max-h-24 leading-relaxed"
               />
             </div>
 
-            <div className="flex flex-col items-center justify-center gap-3 md:w-48">
+            {/* Controls: Compact Row on Mobile, Vertical Stack on Desktop */}
+            <div className="flex flex-row items-center gap-1 md:flex-col md:w-40 md:justify-center md:gap-3">
               <button
                 type="button"
                 onClick={handleToggleMic}
                 disabled={!micSupported || micStatus === 'error'}
-                className={`relative inline-flex h-16 w-16 items-center justify-center rounded-full border-2 bg-slate-900/80 text-emerald-300 shadow-xl transition-all duration-200 ${micEnabled
-                  ? 'border-emerald-400/70 scale-105 shadow-emerald-500/60'
-                  : 'border-emerald-400/70 hover:scale-105'
-                  } ${!micSupported || micStatus === 'error' ? 'opacity-40 cursor-not-allowed' : ''
-                  }`}
+                className={`relative inline-flex h-8 w-8 md:h-16 md:w-16 items-center justify-center rounded-full border-2 bg-slate-900/80 text-emerald-300 transition-all duration-200 ${micEnabled ? 'border-emerald-400/70 scale-105 shadow-emerald-500/40' : 'border-emerald-400/70 hover:scale-105'}`}
               >
-                <div
-                  className={`absolute -inset-3 rounded-full border ${micStatus === 'active' ? 'border-emerald-400/40 animate-pulse-soft' : 'opacity-0'
-                    }`}
-                />
+                <div className={`absolute -inset-2 md:-inset-3 rounded-full border ${micStatus === 'active' ? 'border-emerald-400/40 animate-pulse-soft' : 'opacity-0'}`} />
                 {micStatus === 'error' ? (
-                  <AlertTriangle size={26} className="text-amber-400" />
+                  <AlertTriangle size={14} className="text-amber-400 md:size-6" />
                 ) : micEnabled ? (
-                  <Mic size={26} />
+                  <Mic size={14} className="md:size-6" />
                 ) : (
-                  <MicOff size={26} />
+                  <MicOff size={14} className="md:size-6" />
                 )}
               </button>
+
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={loading || isProcessing}
-                className="text-xs rounded-full border border-emerald-400/60 px-3 py-1 text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-60 transition-colors"
+                className="flex items-center justify-center rounded-full border border-emerald-400/60 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50 transition-colors h-8 w-8 md:h-auto md:w-auto md:px-4 md:py-2"
               >
-                {isProcessing ? 'Processing...' : 'Send to tutor'}
+                <Send size={14} className="md:mr-2" />
+                <span className="hidden md:inline text-xs font-medium">{isProcessing ? 'Processing...' : 'Send to tutor'}</span>
               </button>
             </div>
           </div>
-          <div className="mt-4">
+
+          {/* Waveform at Bottom */}
+          <div className="mt-0 md:mt-4">
             <WaveformVisualizer isActive={isListening || isSpeaking} />
           </div>
         </GlassCard>
 
         <GlassCard className="flex-1 overflow-y-auto bg-slate-900/40">
           {history.length === 0 && !loading && (
-            <p className="text-sm text-slate-300/80">
-              Start with a broad question like &quot;Can you walk me through supply and demand?&quot;
-              The tutor will build on each turn to keep the dialogue coherent.
-            </p>
+            <div className="flex flex-col items-center justify-center h-full p-4">
+              <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 text-center max-w-sm">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">
+                  <Volume2 className="h-5 w-5 text-emerald-400" />
+                </div>
+                <p className="text-sm font-medium text-emerald-100 mb-1">Start the conversation</p>
+                <p className="text-xs text-slate-400 leading-relaxed">
+                  Try asking: &quot;Can you walk me through supply and demand?&quot;
+                </p>
+              </div>
+            </div>
           )}
           <div className="space-y-4">
             {history.map((turn, idx) => (

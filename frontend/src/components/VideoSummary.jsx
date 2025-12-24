@@ -166,8 +166,8 @@ const VideoSummary = ({ onError }) => {
       <div className="flex h-full flex-col p-4 md:p-6">
         <div className="mb-3 flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-semibold text-coolwhite">Video-style Summary</h2>
-            <p className="text-xs text-slate-300/70">
+            <h2 className="text-base md:text-lg font-semibold text-coolwhite">Video-style Summary</h2>
+            <p className="text-[10px] md:text-xs text-slate-300/70">
               Three focused slides: overview, key concepts, and exam tips – all grounded in your
               material.
             </p>
@@ -242,30 +242,30 @@ const VideoSummary = ({ onError }) => {
 
               <div className="flex-1 min-h-0 overflow-y-auto rounded-2xl bg-slate-900/70 p-4 text-sm text-slate-100 scrollbar-thin scrollbar-thumb-emerald-500/50 scrollbar-track-slate-800/50 hover:scrollbar-thumb-emerald-500/70">
                 {currentSlide.type === 'overview' && (
-                  <p className="leading-relaxed">{summary.overview}</p>
+                  <p className="leading-8 text-base text-slate-200">{summary.overview}</p>
                 )}
                 {currentSlide.type === 'concepts' && (
-                  <ol className="list-decimal space-y-3 pl-5">
+                  <ol className="list-decimal space-y-4 pl-5 marker:text-emerald-400 marker:font-medium">
                     {summary.concepts.map((c, i) => {
                       // Handle both string and object formats
                       const conceptText = typeof c === 'string' ? c : (c.explanation || c.title || JSON.stringify(c));
                       return (
                         // eslint-disable-next-line react/no-array-index-key
-                        <li key={i} className="leading-relaxed">{conceptText}</li>
+                        <li key={i} className="leading-7 text-slate-200">{conceptText}</li>
                       );
                     })}
                   </ol>
                 )}
                 {currentSlide.type === 'tips' && (
-                  <ul className="space-y-3">
+                  <ul className="space-y-4">
                     {summary.examTips.map((t, i) => {
                       // Handle both string and object formats
                       const tipText = typeof t === 'string' ? t : (t.explanation || t.title || JSON.stringify(t));
                       return (
                         // eslint-disable-next-line react/no-array-index-key
-                        <li key={i} className="flex items-start gap-2">
-                          <span className="mt-[3px] h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400" />
-                          <span className="leading-relaxed">{tipText}</span>
+                        <li key={i} className="flex items-start gap-3">
+                          <span className="mt-[6px] h-2 w-2 flex-shrink-0 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50" />
+                          <span className="leading-relaxed text-slate-200 tracking-wide">{tipText}</span>
                         </li>
                       );
                     })}
