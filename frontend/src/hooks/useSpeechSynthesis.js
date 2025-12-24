@@ -29,15 +29,32 @@ export function useSpeechSynthesis(opts = {}) {
     synth.cancel();
 
     const utterance = new SpeechSynthesisUtterance(text);
-    const preferred =
-      voices.find((v) => v.lang === 'en-US' && v.name.includes('Google')) ||
-      voices[0];
+
+    // Improved voice selection
+    const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+    let preferred;
+    if (isIOS) {
+      // On iOS, try to find a high-quality English voice
+      preferred =
+        voices.find(v => v.lang.startsWith('en') && v.name.includes('Samantha')) ||
+        voices.find(v => v.lang.startsWith('en') && v.name.includes('Siri')) ||
+        voices.find(v => v.lang.startsWith('en') && v.name.includes('Enhanced')) ||
+        voices.find(v => v.lang.startsWith('en'));
+    } else {
+      // Desktop preference
+      preferred =
+        voices.find((v) => v.lang === 'en-US' && v.name.includes('Google')) ||
+        voices.find((v) => v.lang.startsWith('en')) ||
+        voices[0];
+    }
 
     if (preferred) {
       utterance.voice = preferred;
     }
 
-    utterance.rate = 0.9;
+    // iOS system voices are often slower than Google voices at the same rate
+    utterance.rate = isIOS ? 1.0 : 0.9;
     utterance.pitch = 1.0;
     utterance.volume = 1.0;
 
@@ -62,7 +79,16 @@ export function useSpeechSynthesis(opts = {}) {
   const prime = useCallback(() => {
     if (!isSupported) return;
     const synth = window.speechSynthesis;
-    synth.resume();
+
+    // On iOS, we need to speak an empty utterance in response to a user gesture
+    // to "unlock" the speech synthesis engine for later use (after async calls).
+    const utterance = new SpeechSynthesisUtterance('');
+    utterance.volume = 0; // Silent
+    synth.speak(utterance);
+
+    if (synth.paused) {
+      synth.resume();
+    }
   }, [isSupported]);
 
   return {

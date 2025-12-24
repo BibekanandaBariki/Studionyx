@@ -36,7 +36,7 @@ const VoiceDialogue = ({ onError }) => {
     },
   });
 
-  const { isSupported: ttsSupported, isSpeaking, speak, stop: stopSpeak } =
+  const { isSupported: ttsSupported, isSpeaking, speak, stop: stopSpeak, prime } =
     useSpeechSynthesis();
 
   // Cleanup on unmount
@@ -115,6 +115,11 @@ const VoiceDialogue = ({ onError }) => {
   const handleSend = async () => {
     const message = pendingMessage || previewTranscript;
     if (!message || isProcessing) return;
+
+    // Prime the TTS engine to unlock audio on iOS
+    if (ttsSupported) {
+      prime();
+    }
 
     setIsProcessing(true);
     setLoading(true);
